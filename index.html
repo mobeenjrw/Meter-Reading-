@@ -283,33 +283,57 @@ function computeRows(raw) {
   if (!raw.length) return [];
   const sorted = [...raw].sort((a,b) => a.date.localeCompare(b.date));
   const rows = [];
+  
   for (let i = 0; i < sorted.length; i++) {
     const cur = sorted[i];
-    if (i === 0) { rows.push({...cur, mm_units:null, ma_units:null, avg:false}); continue; }
+    if (i === 0) {
+      rows.push({...cur, mm_u: 0, ma_u: 0, avg: false});
+      continue;
+    }
+    
     const prev = sorted[i-1];
-    const days = Math.round((new Date(cur.date) - new Date(prev.date)) / 86400000);
-    const mm_diff = cur.mm != null && prev.mm != null ? +(cur.mm - prev.mm).toFixed(2) : null;
-    const ma_diff = cur.ma != null && prev.ma != null ? +(cur.ma - prev.ma).toFixed(2) : null;
-    if (days > 1 && (mm_diff != null || ma_diff != null)) {
+    const diffTime = new Date(cur.date) - new Date(prev.date);
+    const days = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    // یونٹس کا فرق نکالنا
+    const mm_total_diff = (cur.mm != null && prev.mm != null) ? +(cur.mm - prev.mm).toFixed(2) : 0;
+    const ma_total_diff = (cur.ma != null && prev.ma != null) ? +(cur.ma - prev.ma).toFixed(2) : 0;
+
+    if (days > 1) {
+      // اگر ریڈنگ چند دن بعد لی گئی ہے تو یونٹس کو برابر تقسیم کریں
+      const mm_per_day = +(mm_total_diff / days).toFixed(2);
+      const ma_per_day = +(ma_total_diff / days).toFixed(2);
+
       for (let g = 1; g < days; g++) {
-        const gd = new Date(prev.date); gd.setDate(gd.getDate() + g);
+        const gd = new Date(prev.date);
+        gd.setDate(gd.getDate() + g);
         rows.push({
-          date: gd.toISOString().slice(0,10), mm:null, ma:null,
-          mm_units: mm_diff != null ? +(mm_diff/days).toFixed(2) : null,
-          ma_units: ma_diff != null ? +(ma_diff/days).toFixed(2) : null,
+          date: gd.toISOString().slice(0, 10),
+          mm: null, ma: null,
+          mm_u: mm_per_day, ma_u: ma_per_day,
           avg: true
         });
       }
+      // آخری دن (جس دن ریڈنگ لی) اس میں بھی صرف ایک دن کا اوسط حصہ جائے گا
+      rows.push({
+        ...cur,
+        mm_u: mm_per_day,
+        ma_u: ma_per_day,
+        avg: true
+      });
+    } else {
+      // اگر روزانہ ریڈنگ لی جا رہی ہے تو سادہ فرق
+      rows.push({
+        ...cur,
+        mm_u: mm_total_diff,
+        ma_u: ma_total_diff,
+        avg: false
+      });
     }
-    rows.push({
-      ...cur,
-      mm_units: days > 1 ? (mm_diff != null ? +(mm_diff/days).toFixed(2) : null) : mm_diff,
-      ma_units: days > 1 ? (ma_diff != null ? +(ma_diff/days).toFixed(2) : null) : ma_diff,
-      avg: days > 1
-    });
   }
   return rows;
 }
+
 
 // ── CHARTS ──
 function mkChart(id, label, color) {
