@@ -292,28 +292,47 @@ function computeRows(raw) {
     }
     
     const prev = sorted[i-1];
-    const diffTime = new Date(cur.date) - new Date(prev.date);
-    const days = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const days = Math.round((new Date(cur.date) - new Date(prev.date)) / 86400000);
     
-    // یونٹس کا فرق نکالنا
-    const mm_total_diff = (cur.mm != null && prev.mm != null) ? +(cur.mm - prev.mm).toFixed(2) : 0;
-    const ma_total_diff = (cur.ma != null && prev.ma != null) ? +(cur.ma - prev.ma).toFixed(2) : 0;
+    // کل یونٹس کا فرق (بغیر کسی راؤنڈنگ کے)
+    const mm_total_diff = (cur.mm != null && prev.mm != null) ? (cur.mm - prev.mm) : 0;
+    const ma_total_diff = (cur.ma != null && prev.ma != null) ? (cur.ma - prev.ma) : 0;
 
-    if (days > 1) {
-      // اگر ریڈنگ چند دن بعد لی گئی ہے تو یونٹس کو برابر تقسیم کریں
-      const mm_per_day = +(mm_total_diff / days).toFixed(2);
-      const ma_per_day = +(ma_total_diff / days).toFixed(2);
+    if (days > 0) {
+      // روزانہ کا اوسط نکالنا
+      const mm_per_day = mm_total_diff / days;
+      const ma_per_day = ma_total_diff / days;
 
-      for (let g = 1; g < days; g++) {
+      // پچھلی تاریخ سے لے کر آج تک کے تمام دن بھرنا
+      for (let g = 1; g <= days; g++) {
         const gd = new Date(prev.date);
         gd.setDate(gd.getDate() + g);
-        rows.push({
-          date: gd.toISOString().slice(0, 10),
-          mm: null, ma: null,
-          mm_u: mm_per_day, ma_u: ma_per_day,
-          avg: true
-        });
+        const dateStr = gd.toISOString().slice(0, 10);
+        
+        // اگر یہ وہ دن ہے جس دن ریڈنگ لی گئی (آخری دن)
+        if (g === days) {
+          rows.push({
+            ...cur,
+            mm_u: mm_per_day,
+            ma_u: ma_per_day,
+            avg: days > 1
+          });
+        } else {
+          // درمیانی خالی دن
+          rows.push({
+            date: dateStr,
+            mm: null, ma: null,
+            mm_u: mm_per_day,
+            ma_u: ma_per_day,
+            avg: true
+          });
+        }
       }
+    }
+  }
+  return rows;
+}
+
       // آخری دن (جس دن ریڈنگ لی) اس میں بھی صرف ایک دن کا اوسط حصہ جائے گا
       rows.push({
         ...cur,
