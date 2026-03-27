@@ -280,50 +280,59 @@ function useLocalMode() {
 
 // ── COMPUTE ROWS ──
 function computeRows(raw) {
-  if (!raw.length) return [];
-  const sorted = [...raw].sort((a,b) => a.date.localeCompare(b.date));
+  if (!raw || raw.length === 0) return [];
+  
+  // ڈیٹا کو تاریخ کے حساب سے ترتیب دیں
+  const sorted = [...raw].sort((a, b) => a.date.localeCompare(b.date));
   const rows = [];
   
-  for (let i = 0; i < sorted.length; i++) {
+  // پہلی انٹری (Starting Point)
+  rows.push({
+    ...sorted[0],
+    mm_u: 0,
+    ma_u: 0,
+    avg: false
+  });
+
+  for (let i = 1; i < sorted.length; i++) {
     const cur = sorted[i];
-    if (i === 0) {
-      rows.push({...cur, mm_u: 0, ma_u: 0, avg: false});
-      continue;
-    }
+    const prev = sorted[i - 1];
     
-    const prev = sorted[i-1];
-    const days = Math.round((new Date(cur.date) - new Date(prev.date)) / 86400000);
+    const d1 = new Date(prev.date);
+    const d2 = new Date(cur.date);
+    const diffTime = Math.abs(d2 - d1);
+    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    // کل یونٹس کا فرق (بغیر کسی راؤنڈنگ کے)
-    const mm_total_diff = (cur.mm != null && prev.mm != null) ? (cur.mm - prev.mm) : 0;
-    const ma_total_diff = (cur.ma != null && prev.ma != null) ? (cur.ma - prev.ma) : 0;
+    // کل یونٹس کا فرق
+    const mm_diff = (cur.mm && prev.mm) ? (Number(cur.mm) - Number(prev.mm)) : 0;
+    const ma_diff = (cur.ma && prev.ma) ? (Number(cur.ma) - Number(prev.ma)) : 0;
 
     if (days > 0) {
-      // روزانہ کا اوسط نکالنا
-      const mm_per_day = mm_total_diff / days;
-      const ma_per_day = ma_total_diff / days;
+      const mm_per_day = mm_diff / days;
+      const ma_per_day = ma_diff / days;
 
-      // پچھلی تاریخ سے لے کر آج تک کے تمام دن بھرنا
+      // ہر دن کی انٹری بھرنا
       for (let g = 1; g <= days; g++) {
-        const gd = new Date(prev.date);
-        gd.setDate(gd.getDate() + g);
-        const dateStr = gd.toISOString().slice(0, 10);
-        
-        // اگر یہ وہ دن ہے جس دن ریڈنگ لی گئی (آخری دن)
+        const nextDate = new Date(d1);
+        nextDate.setDate(d1.getDate() + g);
+        const dateStr = nextDate.toISOString().split('T')[0];
+
         if (g === days) {
+          // جس دن ریڈنگ لی گئی
           rows.push({
             ...cur,
-            mm_u: mm_per_day,
-            ma_u: ma_per_day,
+            mm_u: Number(mm_per_day.toFixed(2)),
+            ma_u: Number(ma_per_day.toFixed(2)),
             avg: days > 1
           });
         } else {
-          // درمیانی خالی دن
+          // درمیانی اوسط والے دن
           rows.push({
             date: dateStr,
-            mm: null, ma: null,
-            mm_u: mm_per_day,
-            ma_u: ma_per_day,
+            mm: null,
+            ma: null,
+            mm_u: Number(mm_per_day.toFixed(2)),
+            ma_u: Number(ma_per_day.toFixed(2)),
             avg: true
           });
         }
@@ -332,7 +341,6 @@ function computeRows(raw) {
   }
   return rows;
 }
-
       // آخری دن (جس دن ریڈنگ لی) اس میں بھی صرف ایک دن کا اوسط حصہ جائے گا
       rows.push({
         ...cur,
