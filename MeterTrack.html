@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Meter Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&family=Barlow+Condensed:wght@500;700&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#1c2330;--border:#30363d;
+  --blue:#58a6ff;--amber:#f0b429;--red:#f85149;--green:#3fb950;--text:#e6edf3;--muted:#8b949e;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;min-height:100vh;}
+header{border-bottom:1px solid var(--border);padding:0 1.25rem;display:flex;align-items:center;
+  justify-content:space-between;height:56px;position:sticky;top:0;
+  background:rgba(13,17,23,.95);backdrop-filter:blur(10px);z-index:100;}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Barlow Condensed',sans-serif;
+  font-size:1.15rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}
+.logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--amber),var(--blue));
+  border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.9rem;}
+.header-date{font-family:'Share Tech Mono',monospace;font-size:.75rem;color:var(--muted);}
+.container{max-width:960px;margin:0 auto;padding:1.25rem;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+@media(max-width:640px){.grid-2{grid-template-columns:1fr;}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.2rem;position:relative;overflow:hidden;}
+.card.mm::before,.card.ma::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:12px 12px 0 0;}
+.card.mm::before{background:var(--blue);}
+.card.ma::before{background:var(--amber);}
+.card.plain{border-top:2px solid var(--border);}
+.card-label{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem;}
+.stat-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem;}
+.stat-chip{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.4rem .8rem;flex:1;min-width:80px;}
+.stat-chip .val{font-family:'Share Tech Mono',monospace;font-size:1.2rem;font-weight:600;line-height:1.1;}
+.stat-chip .sub{font-size:.68rem;color:var(--muted);margin-top:.1rem;}
+.mm-val{color:var(--blue);}
+.ma-val{color:var(--amber);}
+.badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;border-radius:20px;font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.badge-red{background:rgba(248,81,73,.18);color:var(--red);border:1px solid rgba(248,81,73,.3);animation:pulse-red 1.5s infinite;}
+.badge-green{background:rgba(63,185,80,.15);color:var(--green);border:1px solid rgba(63,185,80,.25);}
+.badge-blue{background:rgba(88,166,255,.12);color:var(--blue);border:1px solid rgba(88,166,255,.2);}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,.3);}50%{box-shadow:0 0 0 5px rgba(248,81,73,0);}}
+.form-group{margin-bottom:.8rem;}
+label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:.3rem;font-weight:600;letter-spacing:.04em;}
+input[type=number],input[type=date]{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.55rem .75rem;font-size:.9rem;font-family:'Share Tech Mono',monospace;outline:none;transition:border-color .2s;}
+input[type=number]:focus,input[type=date]:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(88,166,255,.12);}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.5);}
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.6rem 1.1rem;border-radius:8px;border:none;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .15s;}
+.btn-primary{background:var(--blue);color:#0d1117;}
+.btn-primary:hover{background:#79baff;}
+.btn-sm{padding:.4rem .8rem;font-size:.8rem;}
+.btn-danger{background:var(--red);color:#fff;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+.btn-ghost:hover{border-color:var(--blue);color:var(--blue);}
+.btn-full{width:100%;justify-content:center;margin-top:.5rem;}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin:1.2rem 0 .7rem;}
+.section-hdr h2{font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+.flex-gap{display:flex;gap:.5rem;flex-wrap:wrap;}
+.tab{padding:.4rem .9rem;border-radius:8px;border:1px solid var(--border);font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s;}
+.tab.active{background:var(--surface2);color:var(--text);border-color:var(--blue);}
+.chart-wrap{position:relative;height:180px;margin-top:.5rem;}
+@media(max-width:640px){.chart-wrap{height:150px;}}
+.tbl-wrap{overflow-x:auto;margin-top:.6rem;}
+table{width:100%;border-collapse:collapse;font-size:.82rem;}
+th{text-align:left;padding:.5rem .6rem;font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);}
+td{padding:.48rem .6rem;border-bottom:1px solid rgba(48,54,61,.5);font-family:'Share Tech Mono',monospace;font-size:.82rem;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(48,54,61,.3);}
+.td-date{color:var(--muted);font-size:.75rem;}
+.avg-row td{font-style:italic;opacity:.7;}
+.alert-cell{display:flex;align-items:center;gap:.4rem;}
+.month-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.6rem;margin-top:.6rem;}
+.month-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.7rem;}
+.month-name{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.3rem;}
+.month-vals{display:flex;flex-direction:column;gap:.15rem;}
+.month-vals span{font-family:'Share Tech Mono',monospace;font-size:.88rem;}
+#toast{position:fixed;bottom:1.2rem;right:1.2rem;z-index:999;background:var(--surface2);border:1px solid var(--green);color:var(--green);padding:.7rem 1.1rem;border-radius:10px;font-size:.85rem;font-weight:600;transform:translateY(80px);opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;}
+#toast.show{transform:translateY(0);opacity:1;}
+.empty{text-align:center;padding:2rem 1rem;color:var(--muted);font-size:.85rem;}
+.empty-icon{font-size:2rem;margin-bottom:.5rem;}
+.text-muted{color:var(--muted);}
+
+/* SETUP SCREEN */
+#setup-screen{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
+.setup-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:480px;width:100%;}
+.setup-box h2{font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.5rem;}
+.setup-box p{color:var(--muted);font-size:.88rem;line-height:1.6;margin-bottom:1.2rem;}
+.setup-box ol{color:var(--muted);font-size:.85rem;line-height:2;padding-left:1.2rem;margin-bottom:1.2rem;}
+.setup-box ol li a{color:var(--blue);}
+.setup-box input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.6rem .85rem;font-size:.9rem;font-family:'Share Tech Mono',monospace;outline:none;margin-bottom:.8rem;}
+.setup-box input:focus{border-color:var(--blue);}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+.dot-ok{background:var(--green);}
+.dot-err{background:var(--red);}
+#conn-status{font-size:.8rem;margin-bottom:.8rem;min-height:1.2rem;}
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen">
+  <div class="setup-box">
+    <h2>⚡ Meter Tracker Setup</h2>
+    <p>To share readings across all family devices, this app uses a free Firebase database. You only need to set this up <strong>once</strong>.</p>
+    <ol>
+      <li>Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
+      <li>Click <strong>Add project</strong> → name it "MeterTracker" → Create</li>
+      <li>Click <strong>Realtime Database</strong> → Create database → Start in <em>test mode</em></li>
+      <li>Copy the database URL (looks like <code>https://xxx-default-rtdb.firebaseio.com</code>)</li>
+      <li>Paste it below and click Connect</li>
+    </ol>
+   <input type="text" id="fb-url" value="https://metertracker-cc729-default-rtdb.firebaseio.com"/>
+    <div id="conn-status"></div>
+    <button class="btn btn-primary btn-full" onclick="connectFirebase()">🔗 Connect & Start</button>
+    <div style="margin-top:.8rem;text-align:center;">
+      <button class="btn btn-ghost btn-sm" onclick="useLocalMode()">Use local mode (this device only)</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="logo"><div class="logo-icon">⚡</div>Meter Tracker</div>
+  <div class="header-date" id="hdrDate"></div>
+</header>
+
+<div class="container">
+  <div class="grid-2" style="margin-top:1rem;">
+    <div class="card mm">
+      <div class="card-label">Meter M-M</div>
+      <div class="stat-row">
+        <div class="stat-chip"><div class="val mm-val" id="mm-last">—</div><div class="sub">Last Reading</div></div>
+        <div class="stat-chip"><div class="val mm-val" id="mm-today">—</div><div class="sub">Today's Units</div></div>
+        <div class="stat-chip"><div class="val mm-val" id="mm-avg">—</div><div class="sub">Daily Avg</div></div>
+        <div class="stat-chip"><div class="val mm-val" id="mm-month">—</div><div class="sub">This Month</div></div>
+      </div>
+      <div id="mm-alert"></div>
+    </div>
+    <div class="card ma">
+      <div class="card-label">Meter M-A</div>
+      <div class="stat-row">
+        <div class="stat-chip"><div class="val ma-val" id="ma-last">—</div><div class="sub">Last Reading</div></div>
+        <div class="stat-chip"><div class="val ma-val" id="ma-today">—</div><div class="sub">Today's Units</div></div>
+        <div class="stat-chip"><div class="val ma-val" id="ma-avg">—</div><div class="sub">Daily Avg</div></div>
+        <div class="stat-chip"><div class="val ma-val" id="ma-month">—</div><div class="sub">This Month</div></div>
+      </div>
+      <div id="ma-alert"></div>
+    </div>
+  </div>
+
+  <div class="section-hdr"><h2>Add Reading</h2></div>
+  <div class="card plain">
+    <div class="grid-2">
+      <div class="form-group"><label>Date</label><input type="date" id="inp-date"/></div>
+      <div></div>
+      <div class="form-group"><label>Meter M-M Reading</label><input type="number" id="inp-mm" placeholder="e.g. 1234.5" step="0.1"/></div>
+      <div class="form-group"><label>Meter M-A Reading</label><input type="number" id="inp-ma" placeholder="e.g. 5678.2" step="0.1"/></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="addReading()">⚡ Save Reading</button>
+  </div>
+
+  <div class="section-hdr" style="margin-top:1.4rem;">
+    <h2>Usage Trends</h2>
+    <div class="flex-gap">
+      <button class="tab active" onclick="setRange(14,this)">14d</button>
+      <button class="tab" onclick="setRange(30,this)">30d</button>
+      <button class="tab" onclick="setRange(0,this)">All</button>
+    </div>
+  </div>
+  <div class="card plain"><div class="chart-wrap"><canvas id="chartMM"></canvas></div></div>
+  <div style="height:.7rem;"></div>
+  <div class="card plain"><div class="chart-wrap"><canvas id="chartMA"></canvas></div></div>
+
+  <div class="section-hdr" style="margin-top:1.4rem;">
+    <h2>Reading Log</h2>
+    <div class="flex-gap">
+<button class="btn btn-sm btn-primary" onclick="shareToWhatsApp()">📲 WhatsApp Report</button>
+      <button class="btn btn-sm btn-ghost" onclick="exportCSV()">↓ Export CSV</button>
+      <button class="btn btn-sm btn-ghost" onclick="document.getElementById('imp-file').click()">↑ Import CSV</button>
+      <input type="file" id="imp-file" accept=".csv" style="display:none" onchange="importCSV(event)"/>
+    </div>
+  </div>
+  <div class="card plain" style="padding:0;">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>M-M Read</th><th>M-M Units</th><th>M-A Read</th><th>M-A Units</th><th></th></tr></thead>
+        <tbody id="log-body"><tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div>No readings yet.</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="margin-top:1.4rem;"><h2>Monthly Summary</h2></div>
+  <div class="card plain">
+    <div class="month-grid" id="monthly-grid">
+      <div class="empty" style="grid-column:1/-1"><div class="empty-icon">📅</div>Add readings to see monthly totals.</div>
+    </div>
+  </div>
+  <div style="height:2rem;"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const THRESHOLD = 6;
+const FB_KEY = 'meter_firebase_url';
+let chartMM, chartMA, chartRange = 14;
+let fbUrl = "https://metertracker-cc729-default-rtdb.firebaseio.com";
+let useLocal = false;
+
+// ── FIREBASE HELPERS ──
+async function fbGet() {
+  try {
+    const r = await fetch(fbUrl + '/readings.json');
+    const d = await r.json();
+    if (!d) return [];
+    return Object.values(d);
+  } catch(e) { return localGet(); }
+}
+
+async function fbSet(data) {
+  try {
+    const obj = {};
+    data.forEach(r => { obj[r.date.replace(/-/g,'_')] = r; });
+    await fetch(fbUrl + '/readings.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' }, // یہ لائن بہت ضروری ہے
+      body: JSON.stringify(obj)
+    });
+  } catch(e) { localSet(data); }
+}
+// ── LOCAL FALLBACK ──
+function localGet() {
+  try { return JSON.parse(localStorage.getItem('meter_v2')) || []; } catch { return []; }
+}
+function localSet(d) {
+  localStorage.setItem('meter_v2', JSON.stringify(d));
+}
+
+async function loadData() {
+  if (useLocal) return localGet();
+  return await fbGet();
+}
+async function saveData(d) {
+  if (useLocal) { localSet(d); return; }
+  await fbSet(d);
+}
+
+// ── SETUP ──
+async function connectFirebase() {
+  const url = document.getElementById('fb-url').value.trim().replace(/\/$/, '');
+  if (!url.startsWith('https://')) {
+    setStatus('❌ Invalid URL. Must start with https://', false); return;
+  }
+  setStatus('⏳ Testing connection...', null);
+  try {
+    const r = await fetch(url + '/test.json', {method:'PUT', body:'"ok"', headers:{'Content-Type':'application/json'}});
+    if (!r.ok) throw new Error('Failed');
+    fbUrl = url;
+    localStorage.setItem(FB_KEY, url);
+    setStatus('', null);
+    document.getElementById('setup-screen').style.display = 'none';
+    showToast('🔗 Connected to Firebase!');
+    await refreshAll();
+  } catch(e) {
+    setStatus('❌ Could not connect. Check the URL and make sure test mode is enabled.', false);
+  }
+}
+
+function setStatus(msg, ok) {
+  const el = document.getElementById('conn-status');
+  if (!msg) { el.innerHTML = ''; return; }
+  const dot = ok === null ? '' : '<span class="status-dot '+(ok?'dot-ok':'dot-err')+'"></span>';
+  el.innerHTML = dot + msg;
+}
+
+function useLocalMode() {
+  useLocal = true;
+  document.getElementById('setup-screen').style.display = 'none';
+  showToast('📱 Local mode — only this device');
+  refreshAll();
+}
+
+// ── COMPUTE ROWS ──
+function computeRows(raw) {
+  if (!raw.length) return [];
+  const sorted = [...raw].sort((a,b) => a.date.localeCompare(b.date));
+  const rows = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const cur = sorted[i];
+    if (i === 0) { rows.push({...cur, mm_units:null, ma_units:null, avg:false}); continue; }
+    const prev = sorted[i-1];
+    const days = Math.round((new Date(cur.date) - new Date(prev.date)) / 86400000);
+    const mm_diff = cur.mm != null && prev.mm != null ? +(cur.mm - prev.mm).toFixed(2) : null;
+    const ma_diff = cur.ma != null && prev.ma != null ? +(cur.ma - prev.ma).toFixed(2) : null;
+    if (days > 1 && (mm_diff != null || ma_diff != null)) {
+      for (let g = 1; g < days; g++) {
+        const gd = new Date(prev.date); gd.setDate(gd.getDate() + g);
+        rows.push({
+          date: gd.toISOString().slice(0,10), mm:null, ma:null,
+          mm_units: mm_diff != null ? +(mm_diff/days).toFixed(2) : null,
+          ma_units: ma_diff != null ? +(ma_diff/days).toFixed(2) : null,
+          avg: true
+        });
+      }
+    }
+    rows.push({
+      ...cur,
+      mm_units: days > 1 ? (mm_diff != null ? +(mm_diff/days).toFixed(2) : null) : mm_diff,
+      ma_units: days > 1 ? (ma_diff != null ? +(ma_diff/days).toFixed(2) : null) : ma_diff,
+      avg: days > 1
+    });
+  }
+  return rows;
+}
+
+// ── CHARTS ──
+function mkChart(id, label, color) {
+  return new Chart(document.getElementById(id).getContext('2d'), {
+    type:'line',
+    data:{labels:[], datasets:[{label, data:[], borderColor:color, backgroundColor:color+'18',
+      pointBackgroundColor:color, pointRadius:3, pointHoverRadius:5, borderWidth:2, fill:true, tension:0.4}]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:true, labels:{color:'#8b949e', font:{family:'Barlow Condensed',size:12}, boxWidth:10}},
+        tooltip:{backgroundColor:'#1c2330', borderColor:'#30363d', borderWidth:1, titleColor:'#e6edf3', bodyColor:'#8b949e',
+          callbacks:{label:c=>' '+c.parsed.y.toFixed(2)+' units'}}
+      },
+      scales:{
+        x:{grid:{color:'#30363d55'}, ticks:{color:'#8b949e', font:{family:'Share Tech Mono',size:10}, maxTicksLimit:8}},
+        y:{grid:{color:'#30363d55'}, ticks:{color:'#8b949e', font:{family:'Share Tech Mono',size:10}}, beginAtZero:true, suggestedMax:8}
+      }
+    }
+  });
+}
+
+function setRange(n, btn) {
+  chartRange = n;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  refreshAll();
+}
+
+function renderCharts(rows) {
+  let sl = rows.filter(r => r.mm_units != null || r.ma_units != null);
+  if (chartRange > 0) sl = sl.slice(-chartRange);
+  const labels = sl.map(r => fmtDate(r.date));
+  const thresh = sl.map(() => THRESHOLD);
+  function upd(chart, vals) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = vals;
+    if (!chart.data.datasets[1]) {
+      chart.data.datasets.push({label:'Threshold (6)', data:thresh, borderColor:'#f8514960',
+        borderDash:[5,4], borderWidth:1.5, pointRadius:0, fill:false, tension:0});
+    } else { chart.data.datasets[1].data = thresh; }
+    chart.update();
+  }
+  upd(chartMM, sl.map(r => r.mm_units));
+  upd(chartMA, sl.map(r => r.ma_units));
+}
+function getBillingMonthName(dateStr) {
+    const d = new Date(dateStr);
+    if (d.getDate() >= 29) { 
+        d.setMonth(d.getMonth() + 1); 
+    }
+    return d.toLocaleString('default', { month: 'long' });
+}
+
+// ── STATS ──
+// ── UPDATED STATS LOGIC ──
+function renderStats(rows, raw) {
+  const sorted = [...raw].sort((a,b) => a.date.localeCompare(b.date));
+  const lastMM = sorted.filter(r => r.mm != null).at(-1);
+  const lastMA = sorted.filter(r => r.ma != null).at(-1);
+
+  const getBillingMonth = (dateStr) => {
+    const d = new Date(dateStr);
+    if (d.getDate() >= 29) d.setMonth(d.getMonth() + 1);
+    return d.toLocaleString('default', { month: 'long' });
+  };
+
+  const currentMonthName = getBillingMonth(new Date().toISOString().slice(0,10));
+  const cycleRows = rows.filter(r => getBillingMonth(r.date) === currentMonthName);
+  const cMM = cycleRows.reduce((sum, r) => sum + (r.mm_units || 0), 0);
+  const cMA = cycleRows.reduce((sum, r) => sum + (r.ma_units || 0), 0);
+
+  // سمارٹ پرائسنگ لاجک (200 یونٹس والا فارمولا)
+  const getCost = (units) => {
+    const rate = units > 200 ? 45 : 20;
+    return units * rate;
+  };
+
+  const lastMMU = rows.filter(r => r.mm_units != null).at(-1);
+  const lastMAU = rows.filter(r => r.ma_units != null).at(-1);
+
+  const getStatusBadge = (units) => {
+    if (units <= 100) return `<span class="badge badge-green">✨ Ideal</span>`;
+    if (units <= 150) return `<span class="badge badge-blue">✅ Not Ideal</span>`; // لفظ تبدیل کر دیا گیا
+    if (units <= 180) return `<span class="badge" style="background:rgba(240,180,41,0.2); color:#f0b429; border:1px solid #f0b429;">⚠ Excessive</span>`;
+    return `<span class="badge badge-red">🚨 Danger Zone!</span>`;
+  };
+
+  // M-M Display
+  document.querySelectorAll('.mm .card-label')[0].textContent = `Meter M-M (${currentMonthName})`;
+  document.getElementById('mm-last').innerHTML = `${cMM.toFixed(1)} <span style="font-size:0.7rem">Units</span>`;
+  document.getElementById('mm-today').innerHTML = `${lastMMU ? lastMMU.mm_units : 0} <span style="font-size:0.7rem">Units</span>`;
+  document.getElementById('mm-avg').innerHTML = `<span style="color:var(--green)">Rs. ${getCost(cMM).toLocaleString()}</span>`;
+  document.getElementById('mm-month').innerHTML = `<span style="font-size:0.8rem; color:var(--muted)">Last Read: ${lastMM ? lastMM.mm : '—'}</span>`;
+  document.getElementById('mm-alert').innerHTML = getStatusBadge(cMM);
+
+  // M-A Display
+  document.querySelectorAll('.ma .card-label')[0].textContent = `Meter M-A (${currentMonthName})`;
+  document.getElementById('ma-last').innerHTML = `${cMA.toFixed(1)} <span style="font-size:0.7rem">Units</span>`;
+  document.getElementById('ma-today').innerHTML = `${lastMAU ? lastMAU.ma_units : 0} <span style="font-size:0.7rem">Units</span>`;
+  document.getElementById('ma-avg').innerHTML = `<span style="color:var(--green)">Rs. ${getCost(cMA).toLocaleString()}</span>`;
+  document.getElementById('ma-month').innerHTML = `<span style="font-size:0.8rem; color:var(--muted)">Last Read: ${lastMA ? lastMA.ma : '—'}</span>`;
+  document.getElementById('ma-alert').innerHTML = getStatusBadge(cMA);
+
+  const labels = document.querySelectorAll('.stat-chip .sub');
+  labels[0].textContent = "Total Month"; labels[1].textContent = "Yesterday"; labels[2].textContent = "Total Bill";
+  labels[4].textContent = "Total Month"; labels[5].textContent = "Yesterday"; labels[6].textContent = "Total Bill";
+}
+
+// ── UPDATED MONTHLY SUMMARY (28th Cycle Fix) ──
+function renderMonthly(raw) {
+  const months = {};
+  const rows = computeRows(raw);
+  
+  const getBillingMonth = (dateStr) => {
+    const d = new Date(dateStr);
+    if (d.getDate() >= 29) d.setMonth(d.getMonth() + 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  };
+
+  rows.forEach(r => {
+    const m = getBillingMonth(r.date);
+    if (!months[m]) months[m] = { mm: 0, ma: 0 };
+    months[m].mm += (r.mm_units || 0);
+    months[m].ma += (r.ma_units || 0);
+  });
+
+  const keys = Object.keys(months).sort();
+  const grid = document.getElementById('monthly-grid');
+  if (!keys.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No billing data yet.</div>';
+    return;
+  }
+
+  const mn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  grid.innerHTML = keys.map(k => {
+    const p = k.split('-');
+    return `<div class="month-card">
+      <div class="month-name">${mn[+p[1] - 1]} ${p[0]} Bill</div>
+      <div class="month-vals">
+        <span class="mm-val">M-M: ${months[k].mm.toFixed(1)} u</span>
+        <span class="ma-val">M-A: ${months[k].ma.toFixed(1)} u</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+
+
+// ── TABLE ──
+function renderTable(rows, raw) {
+  const tbody = document.getElementById('log-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">📊</div>No readings yet.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...rows].reverse().map(r => {
+    const isReal = raw.some(x => x.date === r.date);
+    const mmH = r.mm_units!=null&&r.mm_units>THRESHOLD;
+    const maH = r.ma_units!=null&&r.ma_units>THRESHOLD;
+    const avgB = r.avg ? '<span class="badge badge-blue" style="font-size:.6rem;">avg</span>' : '';
+    const del = isReal ? '<button class="btn btn-sm btn-danger" onclick="deleteReading(\''+r.date+'\')">✕</button>' : '';
+    return '<tr class="'+(r.avg?'avg-row':'')+'">'+
+      '<td class="td-date">'+fmtDate(r.date)+' '+avgB+'</td>'+
+      '<td>'+(r.mm!=null?r.mm:'<span class="text-muted">—</span>')+'</td>'+
+      '<td><div class="alert-cell"><span class="'+(mmH?'mm-val':'')+'">'+(r.mm_units!=null?r.mm_units:'—')+'</span>'+(mmH?'<span class="badge badge-red">⚠</span>':'')+'</div></td>'+
+      '<td>'+(r.ma!=null?r.ma:'<span class="text-muted">—</span>')+'</td>'+
+      '<td><div class="alert-cell"><span class="'+(maH?'ma-val':'')+'">'+(r.ma_units!=null?r.ma_units:'—')+'</span>'+(maH?'<span class="badge badge-red">⚠</span>':'')+'</div></td>'+
+      '<td>'+del+'</td></tr>';
+  }).join('');
+}
+
+// ── MONTHLY ──
+function renderMonthly(raw) {
+  const months = {};
+  const sorted = [...raw].sort((a,b)=>a.date.localeCompare(b.date));
+  for (let i=1;i<sorted.length;i++) {
+    const m = sorted[i].date.slice(0,7);
+    if (!months[m]) months[m]={mm:null,ma:null};
+    if (sorted[i].mm!=null&&sorted[i-1].mm!=null) months[m].mm=+(sorted[i].mm-sorted[i-1].mm).toFixed(2);
+    if (sorted[i].ma!=null&&sorted[i-1].ma!=null) months[m].ma=+(sorted[i].ma-sorted[i-1].ma).toFixed(2);
+  }
+  const keys = Object.keys(months).sort();
+  const grid = document.getElementById('monthly-grid');
+  if (!keys.length) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📅</div>Add readings to see monthly totals.</div>';
+    return;
+  }
+  const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  grid.innerHTML = keys.map(k=>{
+    const p=k.split('-');
+    return '<div class="month-card"><div class="month-name">'+mn[+p[1]-1]+' '+p[0]+'</div>'+
+      '<div class="month-vals">'+
+      '<span class="mm-val">M-M: '+(months[k].mm!=null?months[k].mm+' u':'—')+'</span>'+
+      '<span class="ma-val">M-A: '+(months[k].ma!=null?months[k].ma+' u':'—')+'</span>'+
+      '</div></div>';
+  }).join('');
+}
+
+// ── HELPERS ──
+function fmtDate(d) {
+  const p=d.split('-');
+  const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return (+p[2])+' '+mn[+p[1]-1];
+}
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ── REFRESH ──
+async function refreshAll() {
+  const raw = await loadData();
+  const rows = computeRows(raw);
+  renderStats(rows, raw);
+  renderTable(rows, raw);
+  renderCharts(rows);
+  renderMonthly(raw);
+}
+
+// ── ADD ──
+async function addReading() {
+  const date=document.getElementById('inp-date').value;
+  const mm=document.getElementById('inp-mm').value;
+  const ma=document.getElementById('inp-ma').value;
+  if (!date){alert('Please select a date.');return;}
+  if (!mm&&!ma){alert('Enter at least one meter reading.');return;}
+  const data=await loadData();
+  const idx=data.findIndex(r=>r.date===date);
+  const entry={date, mm:mm!==''?+mm:null, ma:ma!==''?+ma:null};
+  if (idx>=0) data[idx]=entry; else data.push(entry);
+  await saveData(data);
+  document.getElementById('inp-mm').value='';
+  document.getElementById('inp-ma').value='';
+  showToast('⚡ Reading saved!');
+  await refreshAll();
+}
+
+// ── DELETE ──
+async function deleteReading(date) {
+  if (!confirm('Delete reading for '+fmtDate(date)+'?')) return;
+  const data=(await loadData()).filter(r=>r.date!==date);
+  await saveData(data);
+  showToast('🗑 Deleted');
+  await refreshAll();
+}
+function shareToWhatsApp() {
+  // ڈیش بورڈ سے بلنگ مہینے کا نام نکالنا
+  const billingMonth = document.querySelectorAll('.mm .card-label')[0].textContent.match(/\(([^)]+)\)/)[1];
+  
+  // Meter M-M کا ڈیٹا
+  const mmTotalUnits = document.getElementById('mm-last').innerText.split(' ')[0]; // پورے مہینے کے یونٹ
+  const mmYesterdayUnits = document.getElementById('mm-today').innerText.split(' ')[0]; // کل کے یونٹ
+  const mmCost = document.getElementById('mm-avg').innerText;
+  
+  // Meter M-A کا ڈیٹا
+  const maTotalUnits = document.getElementById('ma-last').innerText.split(' ')[0]; // پورے مہینے کے یونٹ
+  const maYesterdayUnits = document.getElementById('ma-today').innerText.split(' ')[0]; // کل کے یونٹ
+  const maCost = document.getElementById('ma-avg').innerText;
+  
+  const msg = `⚡ *Meter Tracker Update* (${billingMonth})\n\n` +
+              `*Meter M-M:*\n` +
+              `• Cycle Total: ${mmTotalUnits} Units\n` +
+              `• Yesterday: ${mmYesterdayUnits} Units\n` +
+              `• Estimated Bill: ${mmCost}\n\n` +
+              `*Meter M-A:*\n` +
+              `• Cycle Total: ${maTotalUnits} Units\n` +
+              `• Yesterday: ${maYesterdayUnits} Units\n` +
+              `• Estimated Bill: ${maCost}\n\n` +
+              `_Total Billing Progress for the family._`;
+              
+  const url = "https://wa.me/?text=" + encodeURIComponent(msg);
+  window.open(url, '_blank');
+}
+
+// ── EXPORT ──
+async function exportCSV() {
+  const rows=computeRows(await loadData());
+  if (!rows.length){alert('No data to export.');return;}
+  const hdr='Date,MM Reading,MM Units,MA Reading,MA Units,Averaged\n';
+  const body=rows.map(r=>[r.date,r.mm!=null?r.mm:'',r.mm_units!=null?r.mm_units:'',r.ma!=null?r.ma:'',r.ma_units!=null?r.ma_units:'',r.avg?'yes':'no'].join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([hdr+body],{type:'text/csv'}));
+  a.download='meter_readings.csv'; a.click();
+}
+
+// ── IMPORT ──
+async function importCSV(event) {
+  const file=event.target.files[0];
+  if (!file) return;
+  const text=await file.text();
+  const lines=text.trim().split('\n').slice(1);
+  if (!lines.length){alert('No data found.');return;}
+  const existing=await loadData();
+  const map={};
+  existing.forEach(r=>{map[r.date]=r;});
+  let added=0,updated=0;
+  for (const line of lines) {
+    const cols=line.split(',').map(s=>s.trim());
+    const date=cols[0],mm=cols[1],ma=cols[3];
+    if (!date||!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const entry={date, mm:mm!==''&&!isNaN(mm)?+mm:null, ma:ma!==''&&!isNaN(ma)?+ma:null};
+    if (map[date]) updated++; else added++;
+    map[date]=entry;
+  }
+  await saveData(Object.values(map));
+  event.target.value='';
+  showToast('↑ Imported: '+added+' new, '+updated+' updated');
+  await refreshAll();
+}
+
+// ── INIT ──
+document.getElementById('setup-screen').style.display = 'none';
+refreshAll();
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('inp-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('hdrDate').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  chartMM=mkChart('chartMM','M-M Daily Units','#58a6ff');
+  chartMA=mkChart('chartMA','M-A Daily Units','#f0b429');
+
+  // Check if Firebase URL already saved
+  const saved=localStorage.getItem(FB_KEY);
+  if (saved) {
+    fbUrl=saved;
+    document.getElementById('fb-url').value=saved;
+    document.getElementById('setup-screen').style.display='none';
+    refreshAll();
+  }
+});
+</script>
+</body>
+</html>
