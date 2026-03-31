@@ -1,233 +1,1144 @@
-const THRESHOLD = 6;
-const FB_KEY = 'meter_firebase_url';
-let chartMM, chartMA, chartRange = 14;
-let fbUrl = "https://metertracker-cc729-default-rtdb.firebaseio.com";
-let useLocal = false;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meter Tracker — Mubeen · Home · Haveli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-// ── FIREBASE HELPERS ──
-async function fbGet() {
-  try {
-    const r = await fetch(fbUrl + '/readings.json');
-    const d = await r.json();
-    return d ? Object.values(d) : [];
-  } catch(e) { return localGet(); }
-}
+  const firebaseConfig = {
+    databaseURL: "https://metertracker-cc729-default-rtdb.firebaseio.com"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+  window._db = db; window._ref = ref; window._set = set;
+  window._get = get; window._push = push; window._onValue = onValue; window._remove = remove;
 
-async function fbSet(data) {
-  try {
-    const obj = {};
-    data.forEach(r => { obj[r.date.replace(/-/g,'_')] = r; });
-    await fetch(fbUrl + '/readings.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(obj)
-    });
-  } catch(e) { localSet(data); }
-}
-function localGet() { try { return JSON.parse(localStorage.getItem('meter_v2')) || []; } catch { return []; } }
-function localSet(d) { localStorage.setItem('meter_v2', JSON.stringify(d)); }
-
-async function loadData() { return useLocal ? localGet() : await fbGet(); }
-async function saveData(d) { useLocal ? localSet(d) : await fbSet(d); }
-
-// ── BILLING CYCLE HELPER (28th Fix) ──
-function getBillingInfo(dateStr) {
-    const d = new Date(dateStr);
-    if (d.getDate() >= 29) d.setMonth(d.getMonth() + 1);
-    return {
-        name: d.toLocaleString('default', { month: 'long' }),
-        short: d.toLocaleString('default', { month: 'short' }),
-        year: d.getFullYear(),
-        key: d.getFullYear() + '-' + (d.getMonth() + 1)
-    };
-}
-
-// ── COMPUTE ROWS (Corrected 122 Unit Logic) ──
-function computeRows(raw) {
-  if (!raw || raw.length === 0) return [];
-  const sorted = [...raw].sort((a,b) => a.date.localeCompare(b.date));
-  const rows = [];
-  
-  for (let i = 0; i < sorted.length; i++) {
-    const cur = sorted[i];
-    if (i === 0) { 
-      rows.push({...cur, mm_units: 0, ma_units: 0, avg: false}); 
-      continue; 
+  onValue(ref(db, '.info/connected'), snap => {
+    const el = document.getElementById('conn-dot');
+    if (!el) return;
+    if (snap.val()) {
+      el.textContent = '● Online'; el.className = 'conn-dot online';
+    } else {
+      el.textContent = '● Offline'; el.className = 'conn-dot offline';
     }
-    const prev = sorted[i-1];
-    const days = Math.round((new Date(cur.date) - new Date(prev.date)) / 86400000);
-    const mm_diff = (cur.mm != null && prev.mm != null) ? (cur.mm - prev.mm) : 0;
-    const ma_diff = (cur.ma != null && prev.ma != null) ? (cur.ma - prev.ma) : 0;
+  });
+</script>
 
-    if (days > 0) {
-      const mm_per_day = mm_diff / days;
-      const ma_per_day = ma_diff / days;
-      for (let g = 1; g <= days; g++) {
-        const gd = new Date(prev.date);
-        gd.setDate(gd.getDate() + g);
-        rows.push({
-          date: gd.toISOString().slice(0,10),
-          mm: g === days ? cur.mm : null,
-          ma: g === days ? cur.ma : null,
-          mm_units: mm_per_day,
-          ma_units: ma_per_day,
-          avg: days > 1
-        });
-      }
+<style>
+/* ══════════════════════════════════════════
+   VARIABLES & RESET
+══════════════════════════════════════════ */
+:root {
+  --navy:    #0b1d3a;
+  --navy2:   #0f2548;
+  --navy3:   #163060;
+  --card:    #0e2040;
+  --card2:   #132850;
+  --blue:    #1d4ed8;
+  --blue2:   #2563eb;
+  --sky:     #38bdf8;
+  --white:   #f0f6ff;
+  --gray:    #7f9bbf;
+  --light:   #c8d9f0;
+  --border:  rgba(255,255,255,0.08);
+  --red:     #ef4444;
+  --amber:   #f59e0b;
+  --green:   #22c55e;
+  --purple:  #a78bfa;
+  --teal:    #2dd4bf;
+
+  --m-mubeen: #38bdf8;
+  --m-home:   #a78bfa;
+  --m-haveli: #2dd4bf;
+
+  --sidebar-w: 240px;
+  --topbar-h:  60px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--navy);
+  color: var(--white);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+}
+
+/* ══════════════════════════════════════════
+   TOP BAR
+══════════════════════════════════════════ */
+.topbar {
+  height: var(--topbar-h);
+  background: var(--navy2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px;
+  gap: 14px;
+  position: sticky; top: 0; z-index: 200;
+  flex-shrink: 0;
+}
+.topbar-logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px; font-weight: 900;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--sky);
+  white-space: nowrap;
+}
+.topbar-logo span { color: var(--white); opacity: 0.4; margin: 0 4px; }
+.topbar-sub {
+  font-size: 12px; color: var(--gray); letter-spacing: 0.3px;
+  display: none;
+}
+.conn-dot {
+  margin-left: auto; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.5px; white-space: nowrap;
+}
+.conn-dot.online  { color: var(--green); }
+.conn-dot.offline { color: var(--red); }
+
+/* hamburger — mobile only */
+.ham-btn {
+  display: none; flex-direction: column; gap: 5px;
+  background: none; border: none; cursor: pointer; padding: 4px;
+}
+.ham-btn span { width: 22px; height: 2px; background: var(--white); border-radius: 2px; display: block; }
+
+/* ══════════════════════════════════════════
+   LAYOUT (desktop: sidebar + main)
+══════════════════════════════════════════ */
+.layout {
+  display: flex; flex: 1;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--navy2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  flex-shrink: 0;
+  position: sticky; top: var(--topbar-h);
+  height: calc(100vh - var(--topbar-h));
+  overflow-y: auto;
+}
+.sidebar-nav { padding: 14px 10px; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-radius: 9px;
+  cursor: pointer; margin-bottom: 3px;
+  color: var(--gray); font-size: 14px; font-weight: 500;
+  transition: all .18s; border: 1px solid transparent;
+  user-select: none;
+}
+.nav-item .ni-icon { font-size: 16px; width: 22px; text-align: center; }
+.nav-item:hover  { background: rgba(255,255,255,0.05); color: var(--white); }
+.nav-item.active { background: rgba(37,99,235,0.18); color: var(--sky); border-color: rgba(56,189,248,0.2); }
+
+.sidebar-meters { padding: 0 10px 14px; }
+.sidebar-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--gray); padding: 0 14px 8px;
+}
+.meter-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 8px; margin-bottom: 3px;
+  font-size: 13px; font-weight: 600; color: var(--gray);
+  cursor: pointer; transition: all .18s;
+}
+.meter-chip:hover { background: rgba(255,255,255,0.04); color: var(--white); }
+.meter-chip .mc-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* ── MAIN CONTENT ── */
+.main {
+  flex: 1; overflow-y: auto;
+  padding: 28px 28px 60px;
+  min-width: 0;
+}
+
+/* ══════════════════════════════════════════
+   PAGES
+══════════════════════════════════════════ */
+.page { display: none; }
+.page.active { display: block; }
+
+.page-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 28px; font-weight: 900; letter-spacing: 0.5px;
+  color: var(--white); margin-bottom: 6px; text-transform: uppercase;
+}
+.page-sub { font-size: 13px; color: var(--gray); margin-bottom: 24px; }
+
+/* ══════════════════════════════════════════
+   DASHBOARD — METER CARDS GRID
+══════════════════════════════════════════ */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.meter-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  position: relative; overflow: hidden;
+  transition: transform .18s, box-shadow .18s;
+}
+.meter-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+.meter-card::after {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  border-radius: 14px 14px 0 0;
+}
+.meter-card.mubeen::after { background: linear-gradient(90deg, var(--blue), var(--m-mubeen)); }
+.meter-card.home::after   { background: linear-gradient(90deg, #6d28d9, var(--m-home)); }
+.meter-card.haveli::after { background: linear-gradient(90deg, #0d9488, var(--m-haveli)); }
+
+.mc-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 18px; font-weight: 900; letter-spacing: 1px;
+  text-transform: uppercase; margin-bottom: 16px;
+}
+.meter-card.mubeen .mc-name { color: var(--m-mubeen); }
+.meter-card.home .mc-name   { color: var(--m-home); }
+.meter-card.haveli .mc-name { color: var(--m-haveli); }
+
+.mc-stats {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-bottom: 14px;
+}
+.mc-stat {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px;
+}
+.mc-stat-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 22px; font-weight: 600; line-height: 1;
+  margin-bottom: 4px;
+}
+.mc-stat-lbl { font-size: 10px; color: var(--gray); letter-spacing: 0.3px; }
+
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.3px;
+  margin-bottom: 10px;
+}
+.s-ideal   { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+.s-note    { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); }
+.s-danger  { background: rgba(239,68,68,0.12);  color: #f87171; border: 1px solid rgba(239,68,68,0.3);
+  animation: pulse-pill 1.6s ease-in-out infinite; }
+@keyframes pulse-pill {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.35); }
+  50%      { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+
+.mc-footer { font-size: 11px; color: var(--gray); }
+.mc-footer b { color: var(--light); font-family: 'IBM Plex Mono', monospace; font-weight: 500; }
+
+/* cycle banner */
+.cycle-banner {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 20px;
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 24px; flex-wrap: wrap; gap: 10px;
+}
+.cycle-icon { font-size: 22px; }
+.cycle-label { font-size: 12px; color: var(--gray); margin-bottom: 2px; }
+.cycle-range {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 15px; font-weight: 600; color: var(--sky);
+}
+
+/* ══════════════════════════════════════════
+   CARDS (generic)
+══════════════════════════════════════════ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px;
+  margin-bottom: 20px;
+}
+.card-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--sky);
+  margin-bottom: 18px;
+}
+
+/* ══════════════════════════════════════════
+   FORM ELEMENTS
+══════════════════════════════════════════ */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group { margin-bottom: 14px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label {
+  display: block; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.8px; text-transform: uppercase;
+  color: var(--gray); margin-bottom: 6px;
+}
+.form-input, .form-select {
+  width: 100%; padding: 10px 13px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; color: var(--white);
+  font-size: 14px; font-family: 'IBM Plex Mono', monospace;
+  outline: none; transition: border-color .18s;
+  -webkit-appearance: none; appearance: none;
+}
+.form-input:focus, .form-select:focus { border-color: var(--blue2); }
+.form-select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237f9bbf' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 12px center; padding-left: 32px; }
+.form-select option { background: #0f2548; }
+
+.btn {
+  padding: 11px 22px; border-radius: 9px; border: none;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.3px;
+  cursor: pointer; transition: opacity .18s, transform .1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: linear-gradient(135deg, var(--blue), var(--blue2)); color: #fff; }
+.btn-primary:hover { opacity: 0.9; }
+.btn-success { background: linear-gradient(135deg, #065f46, #059669); color: #fff; }
+.btn-danger  { background: linear-gradient(135deg, #991b1b, #ef4444); color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 11px; }
+.btn-full { width: 100%; }
+
+/* ══════════════════════════════════════════
+   LOG TABLE / LIST
+══════════════════════════════════════════ */
+.filter-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.filter-bar .form-select { width: auto; min-width: 140px; }
+.filter-bar label { font-size: 12px; color: var(--gray); font-weight: 600; }
+
+/* desktop table */
+.data-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--gray);
+  padding: 0 14px 12px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.mono { font-family: 'IBM Plex Mono', monospace; font-weight: 500; }
+
+.meter-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 600;
+}
+.badge-mubeen { background: rgba(56,189,248,0.12); color: var(--m-mubeen); }
+.badge-home   { background: rgba(167,139,250,0.12); color: var(--m-home); }
+.badge-haveli { background: rgba(45,212,191,0.12);  color: var(--m-haveli); }
+
+.alert-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(239,68,68,0.12); color: #f87171;
+  border: 1px solid rgba(239,68,68,0.3);
+  padding: 2px 7px; border-radius: 8px; font-size: 10px; font-weight: 700;
+  animation: blink 1.3s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+/* mobile log cards (hidden on desktop) */
+.log-cards { display: none; }
+.log-card {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 14px; margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+}
+
+/* ══════════════════════════════════════════
+   CHARTS
+══════════════════════════════════════════ */
+.chart-wrap {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px; margin-bottom: 20px;
+}
+.chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+}
+.chart-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--sky);
+}
+canvas { max-height: 240px; }
+
+/* ══════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════ */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--card2); border: 1px solid var(--border);
+  color: var(--white); padding: 12px 18px; border-radius: 10px;
+  font-size: 13px; font-weight: 500;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  z-index: 999; opacity: 0; pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity .3s, transform .3s;
+  max-width: 320px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { border-color: rgba(34,197,94,0.4); }
+.toast.error   { border-color: rgba(239,68,68,0.4); background: rgba(127,29,29,0.8); }
+
+/* ══════════════════════════════════════════
+   OVERLAY (mobile sidebar)
+══════════════════════════════════════════ */
+.overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6); z-index: 150;
+}
+.overlay.show { display: block; }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — TABLET & MOBILE
+══════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .dash-grid { grid-template-columns: repeat(2, 1fr); }
+  .form-grid { grid-template-columns: 1fr; }
+  .main { padding: 20px 18px 60px; }
+}
+
+@media (max-width: 768px) {
+  /* Show hamburger, hide sidebar by default */
+  .ham-btn { display: flex; }
+  .topbar-sub { display: block; }
+
+  .sidebar {
+    position: fixed; top: 0; right: -var(--sidebar-w);
+    right: -260px; width: 260px; height: 100vh;
+    z-index: 160; transition: right .25s ease;
+    background: var(--navy2);
+    top: 0; padding-top: var(--topbar-h);
+  }
+  .sidebar.open { right: 0; }
+
+  .main { padding: 16px 14px 80px; }
+  .dash-grid { grid-template-columns: 1fr; gap: 12px; }
+
+  .page-title { font-size: 22px; }
+
+  /* Switch to card layout for log */
+  .data-table-wrap { display: none; }
+  .log-cards { display: block; }
+
+  /* Cycle banner stack */
+  .cycle-banner { flex-direction: column; align-items: flex-start; }
+
+  /* Toast bottom center on mobile */
+  .toast { right: 50%; transform: translateX(50%) translateY(10px); bottom: 16px; }
+  .toast.show { transform: translateX(50%) translateY(0); }
+
+  .mc-stats { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 420px) {
+  .topbar-logo { font-size: 17px; }
+  .mc-stat-val { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════ -->
+<!--  TOP BAR                                -->
+<!-- ════════════════════════════════════════ -->
+<div class="topbar">
+  <button class="ham-btn" onclick="toggleSidebar()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="topbar-logo">⚡ Meter<span>|</span>Tracker</div>
+  <div class="topbar-sub">Mubeen · Home · Haveli</div>
+  <div id="conn-dot" class="conn-dot offline">● Offline</div>
+</div>
+
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+<!-- ════════════════════════════════════════ -->
+<!--  LAYOUT                                 -->
+<!-- ════════════════════════════════════════ -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="showPage('dashboard',this)">
+        <span class="ni-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('entry',this)">
+        <span class="ni-icon">➕</span> Add Reading
+      </div>
+      <div class="nav-item" onclick="showPage('bills',this)">
+        <span class="ni-icon">🧾</span> Add Bill
+      </div>
+      <div class="nav-item" onclick="showPage('log',this)">
+        <span class="ni-icon">📋</span> Reading Log
+      </div>
+      <div class="nav-item" onclick="showPage('billlog',this)">
+        <span class="ni-icon">💰</span> Bill Records
+      </div>
+      <div class="nav-item" onclick="showPage('charts',this)">
+        <span class="ni-icon">📈</span> Charts
+      </div>
+    </nav>
+    <div class="sidebar-meters">
+      <div class="sidebar-section-label">Meters</div>
+      <div class="meter-chip"><span class="mc-dot" style="background:var(--m-mubeen)"></span>Mubeen</div>
+      <div class="meter-chip"><span class="mc-dot" style="background:var(--m-home)"></span>Home</div>
+      <div class="meter-chip"><span class="mc-dot" style="background:var(--m-haveli)"></span>Haveli</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ── PAGE: DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Live overview of all three meters</div>
+
+      <div class="cycle-banner" id="cycle-banner">
+        <span class="cycle-icon">📅</span>
+        <div>
+          <div class="cycle-label">Current Billing Cycle</div>
+          <div class="cycle-range" id="cycle-range">—</div>
+        </div>
+      </div>
+
+      <div class="dash-grid" id="dash-grid">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- ── PAGE: ADD READING ── -->
+    <div class="page" id="page-entry">
+      <div class="page-title">Add Reading</div>
+      <div class="page-sub">Enter today's meter reading</div>
+      <div class="card">
+        <div class="card-title">New Meter Reading</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Meter</label>
+            <select class="form-select" id="entry-meter">
+              <option value="mubeen">Mubeen</option>
+              <option value="home">Home</option>
+              <option value="haveli">Haveli</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-input" id="entry-date">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Meter Reading (units)</label>
+          <input type="number" class="form-input" id="entry-reading" placeholder="e.g. 12345" step="0.1">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="saveReading()">Save Reading ✓</button>
+      </div>
+    </div>
+
+    <!-- ── PAGE: ADD BILL ── -->
+    <div class="page" id="page-bills">
+      <div class="page-title">Add Bill</div>
+      <div class="page-sub">Record monthly bill details for cost estimation</div>
+      <div class="card">
+        <div class="card-title">Monthly Bill Entry</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Meter</label>
+            <select class="form-select" id="bill-meter">
+              <option value="mubeen">Mubeen</option>
+              <option value="home">Home</option>
+              <option value="haveli">Haveli</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Billing Month (cycle start)</label>
+            <input type="month" class="form-input" id="bill-month">
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Actual Units Consumed</label>
+            <input type="number" class="form-input" id="bill-units" placeholder="e.g. 185">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Actual Bill Amount (₨)</label>
+            <input type="number" class="form-input" id="bill-amount" placeholder="e.g. 4200">
+          </div>
+        </div>
+        <button class="btn btn-success btn-full" onclick="saveBill()">Save Bill Record ✓</button>
+      </div>
+    </div>
+
+    <!-- ── PAGE: READING LOG ── -->
+    <div class="page" id="page-log">
+      <div class="page-title">Reading Log</div>
+      <div class="page-sub">All meter readings with daily usage</div>
+      <div class="filter-bar">
+        <label>Filter:</label>
+        <select class="form-select" id="log-filter" onchange="renderLog()">
+          <option value="all">All Meters</option>
+          <option value="mubeen">Mubeen</option>
+          <option value="home">Home</option>
+          <option value="haveli">Haveli</option>
+        </select>
+      </div>
+
+      <!-- Desktop table -->
+      <div class="card data-table-wrap" style="padding:0; overflow:hidden;">
+        <table class="data-table" id="log-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Meter</th>
+              <th>Reading</th>
+              <th>Units/Day</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody">
+            <tr><td colspan="6" style="text-align:center; color:var(--gray); padding:30px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards -->
+      <div class="log-cards" id="log-mobile"></div>
+    </div>
+
+    <!-- ── PAGE: BILL RECORDS ── -->
+    <div class="page" id="page-billlog">
+      <div class="page-title">Bill Records</div>
+      <div class="page-sub">Monthly billing history & per-unit rates</div>
+      <div class="filter-bar">
+        <label>Filter:</label>
+        <select class="form-select" id="billlog-filter" onchange="renderBillLog()">
+          <option value="all">All Meters</option>
+          <option value="mubeen">Mubeen</option>
+          <option value="home">Home</option>
+          <option value="haveli">Haveli</option>
+        </select>
+      </div>
+      <div class="card data-table-wrap" style="padding:0; overflow:hidden;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Meter</th>
+              <th>Units</th>
+              <th>Bill (₨)</th>
+              <th>Per Unit (₨)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="billlog-tbody">
+            <tr><td colspan="6" style="text-align:center; color:var(--gray); padding:30px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="log-cards" id="billlog-mobile"></div>
+    </div>
+
+    <!-- ── PAGE: CHARTS ── -->
+    <div class="page" id="page-charts">
+      <div class="page-title">Charts</div>
+      <div class="page-sub">Daily & monthly unit usage visualization</div>
+
+      <div class="chart-wrap">
+        <div class="chart-header">
+          <div class="chart-title">Daily Units — Last 30 Days</div>
+          <select class="form-select" id="chart-meter" onchange="renderCharts()" style="width:130px; padding:7px 10px 7px 32px; font-size:12px;">
+            <option value="mubeen">Mubeen</option>
+            <option value="home">Home</option>
+            <option value="haveli">Haveli</option>
+          </select>
+        </div>
+        <canvas id="daily-chart"></canvas>
+        <div style="font-size:11px; color:var(--gray); margin-top:8px;">
+          ⚠️ Red bars = days exceeding 6 units/day threshold
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-header">
+          <div class="chart-title">Monthly Units</div>
+        </div>
+        <canvas id="monthly-chart"></canvas>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-header">
+          <div class="chart-title">All Meters — This Cycle</div>
+        </div>
+        <canvas id="compare-chart"></canvas>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- ════════════════════════════════════════ -->
+<!--  JAVASCRIPT                             -->
+<!-- ════════════════════════════════════════ -->
+<script>
+// ── STATE ──────────────────────────────────
+const METERS = {
+  mubeen: { name:'Mubeen', color:'#38bdf8', badgeCls:'badge-mubeen', cardCls:'mubeen' },
+  home:   { name:'Home',   color:'#a78bfa', badgeCls:'badge-home',   cardCls:'home'   },
+  haveli: { name:'Haveli', color:'#2dd4bf', badgeCls:'badge-haveli', cardCls:'haveli' }
+};
+let allReadings = { mubeen:[], home:[], haveli:[] };
+let allBills    = { mubeen:[], home:[], haveli:[] };
+let chartDaily=null, chartMonthly=null, chartCompare=null;
+
+// ── FIREBASE ──────────────────────────────
+function dbRef(path){ return window._ref(window._db, path); }
+
+function loadAll(){
+  Object.keys(METERS).forEach(m=>{
+    window._onValue(dbRef(`meters3/${m}/readings`), snap=>{
+      const d = snap.val();
+      allReadings[m] = d ? Object.entries(d).map(([k,v])=>({...v,_key:k}))
+        .sort((a,b)=>a.date.localeCompare(b.date)) : [];
+      refreshAll();
+    });
+    window._onValue(dbRef(`meters3/${m}/bills`), snap=>{
+      const d = snap.val();
+      allBills[m] = d ? Object.entries(d).map(([k,v])=>({...v,_key:k}))
+        .sort((a,b)=>a.month.localeCompare(b.month)) : [];
+      refreshAll();
+    });
+  });
+}
+
+// ── BILLING CYCLE ─────────────────────────
+// Cycle: 29th of prev month → 28th of current month
+// e.g. Feb bill: Jan 29 → Feb 28
+//      Mar bill: Feb 29 (→ Mar 1 if Feb short) → Mar 28
+function getCycleStart(dateStr){
+  // dateStr = YYYY-MM-DD
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDate(), month = d.getMonth(), year = d.getFullYear();
+
+  let cycleStartMonth, cycleStartYear;
+  if(day >= 29){
+    // cycle started this month on 29th
+    cycleStartMonth = month; cycleStartYear = year;
+  } else {
+    // cycle started previous month on 29th
+    cycleStartMonth = month - 1;
+    cycleStartYear  = year;
+    if(cycleStartMonth < 0){ cycleStartMonth = 11; cycleStartYear--; }
+  }
+
+  // 29th of cycleStartMonth — but cap at month-end if needed
+  const maxDay = new Date(cycleStartYear, cycleStartMonth+1, 0).getDate();
+  const startDay = Math.min(29, maxDay);
+  return new Date(cycleStartYear, cycleStartMonth, startDay);
+}
+
+function getCycleEnd(cycleStart){
+  // 28th of next month after cycleStart
+  const nm = cycleStart.getMonth() + 1;
+  const ny = cycleStart.getFullYear() + (nm > 11 ? 1 : 0);
+  return new Date(ny, nm % 12, 28);
+}
+
+function fmtDate(d){ return d.toISOString().split('T')[0]; }
+function fmtDisp(s){
+  const d = new Date(s+'T00:00:00');
+  return d.toLocaleDateString('en-US',{day:'numeric',month:'short',year:'numeric'});
+}
+
+// ── DAILY UNITS ───────────────────────────
+function calcDailyUnits(readings){
+  const result = [];
+  for(let i=1; i<readings.length; i++){
+    const prev = readings[i-1], curr = readings[i];
+    const d1 = new Date(prev.date+'T00:00:00');
+    const d2 = new Date(curr.date+'T00:00:00');
+    const days = Math.max(1, Math.round((d2-d1)/86400000));
+    const diff = parseFloat(curr.reading) - parseFloat(prev.reading);
+    if(diff < 0) continue;
+    const avg = diff / days;
+    for(let d=0; d<days; d++){
+      const dt = new Date(d1); dt.setDate(dt.getDate()+d+1);
+      result.push({ date: fmtDate(dt), units: avg, days });
     }
   }
-  return rows;
+  return result;
 }
 
-// ── RENDER STATS (Dashboard) ──
-function renderStats(rows, raw) {
-  const currentInfo = getBillingInfo(new Date().toISOString().slice(0,10));
-  const cycleRows = rows.filter(r => {
-      const rInfo = getBillingInfo(r.date);
-      return rInfo.name === currentInfo.name && rInfo.year === currentInfo.year;
-  });
-
-  const cMM = cycleRows.reduce((sum, r) => sum + (r.mm_units || 0), 0);
-  const cMA = cycleRows.reduce((sum, r) => sum + (r.ma_units || 0), 0);
-  const lastDay = rows[rows.length-1] || {mm_units:0, ma_units:0};
-  const getCost = (units) => (units > 200 ? units * 45 : units * 20);
-
-  const getBadge = (units) => {
-    if (units <= 100) return `<span class="badge badge-green">✨ Ideal</span>`;
-    if (units <= 150) return `<span class="badge badge-blue">✅ Not Ideal</span>`;
-    if (units <= 180) return `<span class="badge" style="background:rgba(240,180,41,0.2); color:#f0b429; border:1px solid #f0b429;">⚠ Excessive</span>`;
-    return `<span class="badge badge-red">🚨 Danger Zone!</span>`;
-  };
-
-  // UI Updates
-  document.querySelectorAll('.mm .card-label')[0].textContent = `Meter M-M (${currentInfo.name})`;
-  document.getElementById('mm-last').innerHTML = `${cMM.toFixed(1)} <small>u</small>`;
-  document.getElementById('mm-today').innerHTML = `${lastDay.mm_units.toFixed(1)} <small>u</small>`;
-  document.getElementById('mm-avg').innerHTML = `<span style="color:var(--green)">Rs. ${getCost(cMM).toLocaleString()}</span>`;
-  document.getElementById('mm-month').innerHTML = `<small>Read: ${lastDay.mm || '—'}</small>`;
-  document.getElementById('mm-alert').innerHTML = getBadge(cMM);
-
-  document.querySelectorAll('.ma .card-label')[0].textContent = `Meter M-A (${currentInfo.name})`;
-  document.getElementById('ma-last').innerHTML = `${cMA.toFixed(1)} <small>u</small>`;
-  document.getElementById('ma-today').innerHTML = `${lastDay.ma_units.toFixed(1)} <small>u</small>`;
-  document.getElementById('ma-avg').innerHTML = `<span style="color:var(--green)">Rs. ${getCost(cMA).toLocaleString()}</span>`;
-  document.getElementById('ma-month').innerHTML = `<small>Read: ${lastDay.ma || '—'}</small>`;
-  document.getElementById('ma-alert').innerHTML = getBadge(cMA);
-
-  // Labels Update
-  const lbls = document.querySelectorAll('.stat-chip .sub');
-  lbls[0].textContent = "Cycle Total"; lbls[1].textContent = "Yesterday"; lbls[2].textContent = "Total Bill";
-  lbls[4].textContent = "Cycle Total"; lbls[5].textContent = "Yesterday"; lbls[6].textContent = "Total Bill";
+function getCycleUnits(meter, today){
+  today = today || new Date();
+  const cs = getCycleStart(fmtDate(today));
+  const daily = calcDailyUnits(allReadings[meter]||[]);
+  const startStr = fmtDate(cs);
+  return daily.filter(d=> d.date > startStr && d.date <= fmtDate(today))
+              .reduce((s,d)=>s+d.units, 0);
 }
 
-// ── RENDER MONTHLY SUMMARY ──
-function renderMonthly(rows) {
-  const months = {};
-  rows.forEach(r => {
-    const info = getBillingInfo(r.date);
-    const key = info.key;
-    if (!months[key]) months[key] = { mm: 0, ma: 0, label: info.short + ' ' + info.year };
-    months[key].mm += (r.mm_units || 0);
-    months[key].ma += (r.ma_units || 0);
-  });
-  const keys = Object.keys(months).sort();
-  document.getElementById('monthly-grid').innerHTML = keys.reverse().map(k => `
-    <div class="month-card">
-      <div class="month-name">${months[k].label} Bill</div>
-      <div class="month-vals">
-        <span class="mm-val">M-M: ${months[k].mm.toFixed(1)} u</span>
-        <span class="ma-val">M-A: ${months[k].ma.toFixed(1)} u</span>
+function getLastReading(meter){
+  const r = allReadings[meter]||[];
+  return r.length ? r[r.length-1] : null;
+}
+
+function getYesterdayUnits(meter){
+  const y = new Date(); y.setDate(y.getDate()-1);
+  const ys = fmtDate(y);
+  const daily = calcDailyUnits(allReadings[meter]||[]);
+  const hits = daily.filter(d=>d.date===ys);
+  return hits.length ? hits[hits.length-1].units : null;
+}
+
+function getLastBill(meter){ const b=allBills[meter]||[]; return b.length?b[b.length-1]:null; }
+function getAvgRate(meter){
+  const b=getLastBill(meter);
+  if(!b||!b.units||!b.amount) return null;
+  return parseFloat(b.amount)/parseFloat(b.units);
+}
+
+// ── STATUS ────────────────────────────────
+function getStatus(units){
+  if(units < 100) return {cls:'s-ideal',  icon:'✅', text:'Ideal'};
+  if(units < 140) return {cls:'s-note',   icon:'⚠️', text:'Not Ideal'};
+  if(units < 200) return {cls:'s-danger', icon:'🔴', text:'Danger Zone!'};
+  return               {cls:'s-danger', icon:'🚨', text:'CRITICAL!'};
+}
+
+// ── DASHBOARD ─────────────────────────────
+function renderDashboard(){
+  const today = new Date();
+  const cs = getCycleStart(fmtDate(today));
+  const ce = getCycleEnd(cs);
+  document.getElementById('cycle-range').textContent =
+    `${fmtDisp(fmtDate(cs))} → ${fmtDisp(fmtDate(ce))}`;
+
+  const grid = document.getElementById('dash-grid');
+  grid.innerHTML = '';
+  Object.entries(METERS).forEach(([key,meta])=>{
+    const cu   = getCycleUnits(key);
+    const yU   = getYesterdayUnits(key);
+    const lr   = getLastReading(key);
+    const rate = getAvgRate(key);
+    const est  = rate ? `₨${Math.round(cu*rate).toLocaleString()}` : '—';
+    const st   = getStatus(cu);
+    const lb   = getLastBill(key);
+
+    const c = document.createElement('div');
+    c.className = `meter-card ${meta.cardCls}`;
+    c.innerHTML = `
+      <div class="mc-name">⚡ ${meta.name}</div>
+      <div class="mc-stats">
+        <div class="mc-stat">
+          <div class="mc-stat-val" style="color:${meta.color}">${cu.toFixed(1)}</div>
+          <div class="mc-stat-lbl">Units This Cycle</div>
+        </div>
+        <div class="mc-stat">
+          <div class="mc-stat-val" style="color:${meta.color}">${yU!=null?yU.toFixed(1):'—'}</div>
+          <div class="mc-stat-lbl">Yesterday's Units</div>
+        </div>
+        <div class="mc-stat">
+          <div class="mc-stat-val" style="color:${meta.color}; font-size:17px;">${est}</div>
+          <div class="mc-stat-lbl">Estimated Bill</div>
+        </div>
+        <div class="mc-stat">
+          <div class="mc-stat-val" style="color:${meta.color}; font-size:17px;">${rate?'₨'+rate.toFixed(1):'—'}</div>
+          <div class="mc-stat-lbl">Rate/Unit (prev bill)</div>
+        </div>
       </div>
-    </div>`).join('');
+      <span class="status-pill ${st.cls}">${st.icon} ${st.text}</span>
+      <div class="mc-footer">
+        ${lr?`Last reading: <b>${parseFloat(lr.reading).toLocaleString()}</b> on ${fmtDisp(lr.date)}`:'No readings yet'}
+        ${lb?` &nbsp;|&nbsp; Last bill: <b>₨${parseInt(lb.amount).toLocaleString()}</b>`:'' }
+      </div>`;
+    grid.appendChild(c);
+  });
 }
 
-// ── REMAINING FUNCTIONS (Fixed WhatsApp & Tables) ──
-function renderTable(rows, raw) {
-  const tbody = document.getElementById('log-body');
-  const displayRows = rows.slice(-45);
-  tbody.innerHTML = [...displayRows].reverse().map(r => {
-    const isReal = raw.some(x => x.date === r.date);
-    const mmRed = r.mm_units > THRESHOLD ? 'color:var(--red);font-weight:bold' : '';
-    const maRed = r.ma_units > THRESHOLD ? 'color:var(--red);font-weight:bold' : '';
-    const del = isReal ? `<button class="btn btn-sm btn-danger" onclick="deleteReading('${r.date}')">✕</button>` : '';
-    return `<tr class="${r.avg?'avg-row':''}">
-      <td class="td-date">${fmtDate(r.date)} ${r.avg?'(avg)':''}</td>
-      <td>${r.mm||'—'}</td>
-      <td style="${mmRed}">${r.mm_units.toFixed(2)}</td>
-      <td>${r.ma||'—'}</td>
-      <td style="${maRed}">${r.ma_units.toFixed(2)}</td>
-      <td>${del}</td>
+// ── LOG ───────────────────────────────────
+function renderLog(){
+  const filter = document.getElementById('log-filter').value;
+  const meters = filter==='all' ? Object.keys(METERS) : [filter];
+
+  let items = [];
+  meters.forEach(m=>{
+    const readings = allReadings[m]||[];
+    readings.forEach((r,i)=>{
+      if(i===0){ items.push({meter:m, date:r.date, reading:r.reading, units:null, key:r._key}); return; }
+      const prev=readings[i-1];
+      const days=Math.max(1,Math.round((new Date(r.date+'T00:00:00')-new Date(prev.date+'T00:00:00'))/86400000));
+      const diff=parseFloat(r.reading)-parseFloat(prev.reading);
+      const avg=diff>=0?diff/days:null;
+      items.push({meter:m,date:r.date,reading:r.reading,units:avg,days,key:r._key});
+    });
+  });
+  items.sort((a,b)=>b.date.localeCompare(a.date));
+
+  const empty = `<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:30px;">No records found</td></tr>`;
+  if(!items.length){ document.getElementById('log-tbody').innerHTML=empty; document.getElementById('log-mobile').innerHTML=''; return; }
+
+  const meta_color = k => METERS[k].color;
+
+  // Desktop table
+  document.getElementById('log-tbody').innerHTML = items.map(it=>{
+    const alert = it.units!=null && it.units>6;
+    const unitsDisp = it.units!=null
+      ? `<span class="mono">${it.units.toFixed(2)}</span>${it.days>1?` <span style="color:var(--gray);font-size:10px;">(avg/${it.days}d)</span>`:''}`
+      : '<span style="color:var(--gray);">First entry</span>';
+    return `<tr>
+      <td class="mono">${fmtDisp(it.date)}</td>
+      <td><span class="meter-badge ${METERS[it.meter].badgeCls}">${METERS[it.meter].name}</span></td>
+      <td class="mono" style="color:${meta_color(it.meter)}">${parseFloat(it.reading).toLocaleString()}</td>
+      <td>${unitsDisp} ${alert?'<span class="alert-chip">⚡ &gt;6</span>':''}</td>
+      <td>${alert?'<span style="color:#f87171;font-size:11px;">HIGH</span>':'<span style="color:var(--gray);font-size:11px;">OK</span>'}</td>
+      <td>${it.key?`<button class="btn btn-danger btn-sm" onclick="delReading('${it.meter}','${it.key}')">🗑</button>`:''}</td>
     </tr>`;
+  }).join('');
+
+  // Mobile cards
+  document.getElementById('log-mobile').innerHTML = items.map(it=>{
+    const alert = it.units!=null && it.units>6;
+    return `<div class="log-card">
+      <div>
+        <div style="font-size:12px;color:${meta_color(it.meter)};font-weight:700;margin-bottom:3px;">${METERS[it.meter].name}</div>
+        <div style="font-size:11px;color:var(--gray);font-family:'IBM Plex Mono',monospace;">${fmtDisp(it.date)}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:600;color:${meta_color(it.meter)}">${parseFloat(it.reading).toLocaleString()}</div>
+        ${it.units!=null?`<div style="font-size:12px;color:var(--sky);">${it.units.toFixed(2)} units/day${it.days>1?' (avg)':''}</div>`:'<div style="font-size:11px;color:var(--gray);">First entry</div>'}
+        ${alert?'<span class="alert-chip" style="margin-top:4px;display:inline-flex;">⚡ Exceeds 6 units</span>':''}
+      </div>
+      ${it.key?`<button class="btn btn-danger btn-sm" onclick="delReading('${it.meter}','${it.key}')">🗑</button>`:''}
+    </div>`;
   }).join('');
 }
 
-function shareToWhatsApp() {
-  const month = document.querySelectorAll('.mm .card-label')[0].textContent.match(/\(([^)]+)\)/)[1];
-  const mmT = document.getElementById('mm-last').innerText;
-  const mmY = document.getElementById('mm-today').innerText;
-  const mmC = document.getElementById('mm-avg').innerText;
-  const maT = document.getElementById('ma-last').innerText;
-  const maY = document.getElementById('ma-today').innerText;
-  const maC = document.getElementById('ma-avg').innerText;
-
-  const msg = `⚡ *Meter Tracker (${month})*\n\n` +
-              `*Meter M-M:*\n• Total: ${mmT}\n• Yesterday: ${mmY}\n• Bill: ${mmC}\n\n` +
-              `*Meter M-A:*\n• Total: ${maT}\n• Yesterday: ${maY}\n• Bill: ${maC}\n\n` +
-              `_Live Update from CEMB Quality Dept_`;
-  window.open("https://wa.me/?text=" + encodeURIComponent(msg), '_blank');
+async function delReading(meter,key){
+  if(!confirm('Delete this reading?')) return;
+  await window._remove(dbRef(`meters3/${meter}/readings/${key}`));
+  showToast('Reading deleted','');
 }
 
-function mkChart(id, label, color) {
-  return new Chart(document.getElementById(id).getContext('2d'), {
-    type:'line', data:{labels:[], datasets:[{label, data:[], borderColor:color, backgroundColor:color+'18', fill:true, tension:0.4}]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}
+// ── BILL LOG ─────────────────────────────
+function renderBillLog(){
+  const filter = document.getElementById('billlog-filter').value;
+  const meters = filter==='all' ? Object.keys(METERS) : [filter];
+  let items=[];
+  meters.forEach(m=>{ (allBills[m]||[]).forEach(b=>items.push({...b,meter:m})); });
+  items.sort((a,b)=>b.month.localeCompare(a.month));
+
+  const empty=`<tr><td colspan="6" style="text-align:center;color:var(--gray);padding:30px;">No bill records</td></tr>`;
+  if(!items.length){ document.getElementById('billlog-tbody').innerHTML=empty; document.getElementById('billlog-mobile').innerHTML=''; return; }
+
+  document.getElementById('billlog-tbody').innerHTML = items.map(it=>{
+    const rate = it.units&&it.amount ? (parseFloat(it.amount)/parseFloat(it.units)).toFixed(2) : '—';
+    return `<tr>
+      <td class="mono">${it.month}</td>
+      <td><span class="meter-badge ${METERS[it.meter].badgeCls}">${METERS[it.meter].name}</span></td>
+      <td class="mono">${parseInt(it.units).toLocaleString()}</td>
+      <td class="mono">₨${parseInt(it.amount).toLocaleString()}</td>
+      <td class="mono">₨${rate}</td>
+      <td>${it._key?`<button class="btn btn-danger btn-sm" onclick="delBill('${it.meter}','${it._key}')">🗑</button>`:''}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('billlog-mobile').innerHTML = items.map(it=>{
+    const rate=it.units&&it.amount?(parseFloat(it.amount)/parseFloat(it.units)).toFixed(2):'—';
+    return `<div class="log-card">
+      <div>
+        <div style="font-size:12px;color:${METERS[it.meter].color};font-weight:700;">${METERS[it.meter].name} — ${it.month}</div>
+        <div style="font-size:13px;color:var(--gray);margin-top:4px;">Units: <b style="color:var(--white);font-family:'IBM Plex Mono',monospace;">${parseInt(it.units).toLocaleString()}</b></div>
+        <div style="font-size:13px;color:var(--gray);">Bill: <b style="color:var(--white);font-family:'IBM Plex Mono',monospace;">₨${parseInt(it.amount).toLocaleString()}</b></div>
+        <div style="font-size:13px;color:var(--gray);">Per Unit: <b style="color:var(--sky);font-family:'IBM Plex Mono',monospace;">₨${rate}</b></div>
+      </div>
+      ${it._key?`<button class="btn btn-danger btn-sm" onclick="delBill('${it.meter}','${it._key}')">🗑</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function delBill(meter,key){
+  if(!confirm('Delete this bill record?')) return;
+  await window._remove(dbRef(`meters3/${meter}/bills/${key}`));
+  showToast('Bill record deleted','');
+}
+
+// ── CHARTS ────────────────────────────────
+function renderCharts(){
+  const meter = document.getElementById('chart-meter').value;
+  const meta  = METERS[meter];
+  const daily = calcDailyUnits(allReadings[meter]||[]);
+
+  // Daily — last 30 days
+  const today = new Date();
+  const labels30=[], vals30=[];
+  const dMap={};
+  daily.forEach(d=>{ dMap[d.date]=(dMap[d.date]||0)+d.units; });
+  for(let i=29;i>=0;i--){
+    const d=new Date(today); d.setDate(d.getDate()-i);
+    const s=fmtDate(d);
+    labels30.push(s.slice(5));
+    vals30.push(dMap[s]!=null ? parseFloat(dMap[s].toFixed(2)) : null);
+  }
+  const bgD = vals30.map(v=>v==null?'rgba(255,255,255,0.04)':v>6?'rgba(239,68,68,0.75)':meta.color+'99');
+
+  if(chartDaily) chartDaily.destroy();
+  chartDaily = new Chart(document.getElementById('daily-chart'),{
+    type:'bar',
+    data:{ labels:labels30, datasets:[{ data:vals30, backgroundColor:bgD, borderColor:vals30.map(v=>v>6?'#ef4444':meta.color), borderWidth:1, borderRadius:4 }]},
+    options:{
+      responsive:true, plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#7f9bbf',font:{size:9}}, grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'#7f9bbf'}, grid:{color:'rgba(255,255,255,0.04)'}, beginAtZero:true,
+          suggestedMax: Math.max(7, ...vals30.filter(Boolean))+1 }
+      }
+    }
+  });
+
+  // Monthly
+  const mMap={};
+  daily.forEach(d=>{ const mo=d.date.slice(0,7); mMap[mo]=(mMap[mo]||0)+d.units; });
+  const mLabels=Object.keys(mMap).sort();
+  const mVals=mLabels.map(m=>parseFloat(mMap[m].toFixed(1)));
+  const mBg=mVals.map(v=>v>200?'rgba(239,68,68,0.7)':v>140?'rgba(245,158,11,0.7)':meta.color+'88');
+
+  if(chartMonthly) chartMonthly.destroy();
+  chartMonthly = new Chart(document.getElementById('monthly-chart'),{
+    type:'bar',
+    data:{labels:mLabels, datasets:[{data:mVals,backgroundColor:mBg,borderColor:mVals.map(v=>v>200?'#ef4444':v>140?'#f59e0b':meta.color),borderWidth:1,borderRadius:6}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7f9bbf',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#7f9bbf'},grid:{color:'rgba(255,255,255,0.04)'},beginAtZero:true}}}
+  });
+
+  // Compare — this cycle
+  const cycleUnits = Object.keys(METERS).map(m=>({ label:METERS[m].name, val: getCycleUnits(m), color:METERS[m].color }));
+  if(chartCompare) chartCompare.destroy();
+  chartCompare = new Chart(document.getElementById('compare-chart'),{
+    type:'bar',
+    data:{
+      labels:cycleUnits.map(c=>c.label),
+      datasets:[{data:cycleUnits.map(c=>parseFloat(c.val.toFixed(1))),backgroundColor:cycleUnits.map(c=>c.color+'99'),borderColor:cycleUnits.map(c=>c.color),borderWidth:2,borderRadius:8}]
+    },
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#c8d9f0',font:{size:13,weight:'600'}}},y:{ticks:{color:'#7f9bbf'},grid:{color:'rgba(255,255,255,0.04)'},beginAtZero:true}}}
   });
 }
-function renderCharts(rows) {
-  const sl = rows.slice(-14);
-  const labels = sl.map(r => fmtDate(r.date));
-  chartMM.data.labels = labels; chartMM.data.datasets[0].data = sl.map(r => r.mm_units); chartMM.update();
-  chartMA.data.labels = labels; chartMA.data.datasets[0].data = sl.map(r => r.ma_units); chartMA.update();
-}
-function fmtDate(d) { const p=d.split('-'); const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return (+p[2])+' '+mn[+p[1]-1]; }
-function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
-async function refreshAll() {
-  const raw = await loadData();
-  const rows = computeRows(raw);
-  renderStats(rows, raw);
-  renderTable(rows, raw);
-  renderCharts(rows);
-  renderMonthly(rows);
-}
-async function addReading() {
-  const date=document.getElementById('inp-date').value;
-  const mm=document.getElementById('inp-mm').value;
-  const ma=document.getElementById('inp-ma').value;
-  if(!date) return alert('Select Date');
-  const data = await loadData();
-  const idx = data.findIndex(r => r.date === date);
-  const entry = {date, mm: mm?+mm:null, ma: ma?+ma:null};
-  if(idx>=0) data[idx]=entry; else data.push(entry);
-  await saveData(data);
-  showToast('⚡ Saved!');
-  refreshAll();
-}
-async function deleteReading(date) {
-  if(!confirm('Delete?')) return;
-  const data = (await loadData()).filter(r => r.date !== date);
-  await saveData(data);
-  refreshAll();
+// ── SAVE READING ──────────────────────────
+async function saveReading(){
+  const meter   = document.getElementById('entry-meter').value;
+  const date    = document.getElementById('entry-date').value;
+  const reading = document.getElementById('entry-reading').value;
+  if(!date||!reading){ showToast('Please fill all fields','error'); return; }
+  const val = parseFloat(reading);
+  if(isNaN(val)){ showToast('Invalid reading value','error'); return; }
+  const dup = (allReadings[meter]||[]).find(r=>r.date===date);
+  if(dup){ showToast('Reading for this date already exists','error'); return; }
+  try{
+    const r = window._push(dbRef(`meters3/${meter}/readings`));
+    await window._set(r,{date,reading:val});
+    document.getElementById('entry-reading').value='';
+    showToast(`${METERS[meter].name} — Reading saved ✓`,'success');
+  }catch(e){ showToast('Error: '+e.message,'error'); }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('inp-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('hdrDate').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-  chartMM=mkChart('chartMM','M-M','#58a6ff');
-  chartMA=mkChart('chartMA','M-A','#f0b429');
-  const saved=localStorage.getItem(FB_KEY);
-  if(saved){ fbUrl=saved; document.getElementById('fb-url').value=saved; }
-  refreshAll();
+// ── SAVE BILL ─────────────────────────────
+async function saveBill(){
+  const meter  = document.getElementById('bill-meter').value;
+  const month  = document.getElementById('bill-month').value;
+  const units  = document.getElementById('bill-units').value;
+  const amount = document.getElementById('bill-amount').value;
+  if(!month||!units||!amount){ showToast('Please fill all fields','error'); return; }
+  try{
+    const r = window._push(dbRef(`meters3/${meter}/bills`));
+    await window._set(r,{month,units:parseFloat(units),amount:parseFloat(amount)});
+    document.getElementById('bill-units').value='';
+    document.getElementById('bill-amount').value='';
+    showToast(`${METERS[meter].name} — Bill saved ✓`,'success');
+  }catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+// ── UI HELPERS ────────────────────────────
+function showPage(page, el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  if(el) el.classList.add('active');
+  closeSidebar();
+  if(page==='charts') setTimeout(renderCharts,50);
+  if(page==='log') renderLog();
+  if(page==='billlog') renderBillLog();
+}
+
+function toggleSidebar(){
+  const s = document.getElementById('sidebar');
+  const o = document.getElementById('overlay');
+  s.classList.toggle('open'); o.classList.toggle('show');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+let toastTimer;
+function showToast(msg, type=''){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show'+(type?' '+type:'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.className='toast', 3200);
+}
+
+function refreshAll(){
+  const active = document.querySelector('.page.active');
+  if(!active) return;
+  const id = active.id.replace('page-','');
+  renderDashboard();
+  if(id==='log') renderLog();
+  if(id==='billlog') renderBillLog();
+  if(id==='charts') renderCharts();
+}
+
+// ── INIT ──────────────────────────────────
+window.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('bill-month').value = new Date().toISOString().slice(0,7);
+
+  window.showPage=showPage; window.toggleSidebar=toggleSidebar;
+  window.saveReading=saveReading; window.saveBill=saveBill;
+  window.delReading=delReading; window.delBill=delBill;
+  window.renderLog=renderLog; window.renderBillLog=renderBillLog;
+  window.renderCharts=renderCharts;
+
+  const wait = setInterval(()=>{
+    if(window._db){ clearInterval(wait); loadAll(); }
+  },100);
 });
 </script>
+</body>
+</html>
