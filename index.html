@@ -483,31 +483,7 @@ function renderTable(rows, raw) {
 }
 
 // ── MONTHLY ──
-function renderMonthly(raw) {
-  const months = {};
-  const sorted = [...raw].sort((a,b)=>a.date.localeCompare(b.date));
-  for (let i=1;i<sorted.length;i++) {
-    const m = sorted[i].date.slice(0,7);
-    if (!months[m]) months[m]={mm:null,ma:null};
-    if (sorted[i].mm!=null&&sorted[i-1].mm!=null) months[m].mm=+(sorted[i].mm-sorted[i-1].mm).toFixed(2);
-    if (sorted[i].ma!=null&&sorted[i-1].ma!=null) months[m].ma=+(sorted[i].ma-sorted[i-1].ma).toFixed(2);
-  }
-  const keys = Object.keys(months).sort();
-  const grid = document.getElementById('monthly-grid');
-  if (!keys.length) {
-    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">📅</div>Add readings to see monthly totals.</div>';
-    return;
-  }
-  const mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  grid.innerHTML = keys.map(k=>{
-    const p=k.split('-');
-    return '<div class="month-card"><div class="month-name">'+mn[+p[1]-1]+' '+p[0]+'</div>'+
-      '<div class="month-vals">'+
-      '<span class="mm-val">M-M: '+(months[k].mm!=null?months[k].mm+' u':'—')+'</span>'+
-      '<span class="ma-val">M-A: '+(months[k].ma!=null?months[k].ma+' u':'—')+'</span>'+
-      '</div></div>';
-  }).join('');
-}
+
 
 // ── HELPERS ──
 function fmtDate(d) {
