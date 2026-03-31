@@ -739,44 +739,69 @@ function loadAll(){
     });
   });
 }
+// ── BILLING CYCLE (بہتر اور محفوظ ورژن) ─────────────────────────
+function getCycleStart(dateStr) {
+    const d = new Date(dateStr + 'T12:00:00'); // T12:00:00 سے ٹائم زون کا مسئلہ کم ہوتا ہے
+    let day = d.getDate();
+    let month = d.getMonth();
+    let year = d.getFullYear();
 
-// ── BILLING CYCLE ─────────────────────────
-// Cycle: 29th of prev month → 28th of current month
-// e.g. Feb bill: Jan 29 → Feb 28
-//      Mar bill: Feb 29 (→ Mar 1 if Feb short) → Mar 28
-function getCycleStart(dateStr){
-  // dateStr = YYYY-MM-DD
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDate(), month = d.getMonth(), year = d.getFullYear();
+    let cycleStartMonth = month;
+    let cycleStartYear = year;
 
-  let cycleStartMonth, cycleStartYear;
-  if(day >= 29){
-    // cycle started this month on 29th
-    cycleStartMonth = month; cycleStartYear = year;
-  } else {
-    // cycle started previous month on 29th
-    cycleStartMonth = month - 1;
-    cycleStartYear  = year;
-    if(cycleStartMonth < 0){ cycleStartMonth = 11; cycleStartYear--; }
-  }
+    if (day < 29) {
+        cycleStartMonth = month - 1;
+        cycleStartYear = year;
+        if (cycleStartMonth < 0) {
+            cycleStartMonth = 11;
+            cycleStartYear--;
+        }
+    }
 
-  // 29th of cycleStartMonth — but cap at month-end if needed
-  const maxDay = new Date(cycleStartYear, cycleStartMonth+1, 0).getDate();
-  const startDay = Math.min(29, maxDay);
-  return new Date(cycleStartYear, cycleStartMonth, startDay);
+    const maxDayInCandidate = new Date(cycleStartYear, cycleStartMonth + 1, 0).getDate();
+
+    let startDay;
+    if (maxDayInCandidate >= 29) {
+        startDay = 29;
+    } else {
+        cycleStartMonth++;
+        if (cycleStartMonth > 11) {
+            cycleStartMonth = 0;
+            cycleStartYear++;
+        }
+        startDay = 1;
+    }
+
+    return new Date(cycleStartYear, cycleStartMonth, startDay);
 }
 
-function getCycleEnd(cycleStart){
-  // 28th of next month after cycleStart
-  const nm = cycleStart.getMonth() + 1;
-  const ny = cycleStart.getFullYear() + (nm > 11 ? 1 : 0);
-  return new Date(ny, nm % 12, 28);
+function getCycleEnd(cycleStart) {
+    const startMonth = cycleStart.getMonth();
+    const startYear = cycleStart.getFullYear();
+    const startDay = cycleStart.getDate();
+
+    if (startDay === 1) {
+        // فروری کے بعد والا خاص کیس
+        return new Date(startYear, startMonth, 28);
+    } else {
+        // نارمل کیس: اگلے مہینے کی 28 تاریخ
+        let nm = startMonth + 1;
+        let ny = startYear;
+        if (nm > 11) {
+            nm = 0;
+            ny++;
+        }
+        return new Date(ny, nm, 28);
+    }
 }
 
-function fmtDate(d){ return d.toISOString().split('T')[0]; }
+function fmtDate(d){ 
+    return d.toISOString().split('T')[0]; 
+}
+
 function fmtDisp(s){
-  const d = new Date(s+'T00:00:00');
-  return d.toLocaleDateString('en-US',{day:'numeric',month:'short',year:'numeric'});
+    const d = new Date(s + 'T00:00:00');
+    return d.toLocaleDateString('en-US', {day:'numeric', month:'short', year:'numeric'});
 }
 
 // ── DAILY UNITS ───────────────────────────
@@ -791,7 +816,8 @@ function calcDailyUnits(readings){
     if(diff < 0) continue;
     const avg = diff / days;
     for(let d=0; d<days; d++){
-      const dt = new Date(d1); dt.setDate(dt.getDate()+d+1);
+      const dt = new Date(d1); 
+      dt.setDate(dt.getDate() + d + 1);
       result.push({ date: fmtDate(dt), units: avg, days });
     }
   }
@@ -803,31 +829,38 @@ function getCycleUnits(meter, today){
   const cs = getCycleStart(fmtDate(today));
   const daily = calcDailyUnits(allReadings[meter]||[]);
   const startStr = fmtDate(cs);
-  
-  // یہاں > کے بجائے >= استعمال کریں تاکہ 29 تاریخ بھی شامل ہو جائے
-  return daily.filter(d => d.date >= startStr && d.date <= fmtDate(today))
-               .reduce((s,d) => s + d.units, 0);
+  const todayStr = fmtDate(today);
+
+  // درست منطق: سائیکل کی شروع تاریخ سے آج تک
+  // (فروری کے بعد 1 تاریخ والے کیس میں بھی درست کام کرے)
+  return daily.filter(d => d.date >= startStr && d.date <= todayStr)
+               .reduce((s, d) => s + d.units, 0);
 }
+
 function getLastReading(meter){
   const r = allReadings[meter]||[];
   return r.length ? r[r.length-1] : null;
 }
 
 function getYesterdayUnits(meter){
-  const y = new Date(); y.setDate(y.getDate()-1);
+  const y = new Date(); 
+  y.setDate(y.getDate()-1);
   const ys = fmtDate(y);
   const daily = calcDailyUnits(allReadings[meter]||[]);
-  const hits = daily.filter(d=>d.date===ys);
+  const hits = daily.filter(d => d.date === ys);
   return hits.length ? hits[hits.length-1].units : null;
 }
 
-function getLastBill(meter){ const b=allBills[meter]||[]; return b.length?b[b.length-1]:null; }
-function getAvgRate(meter){
-  const b=getLastBill(meter);
-  if(!b||!b.units||!b.amount) return null;
-  return parseFloat(b.amount)/parseFloat(b.units);
+function getLastBill(meter){ 
+  const b = allBills[meter]||[]; 
+  return b.length ? b[b.length-1] : null; 
 }
 
+function getAvgRate(meter){
+  const b = getLastBill(meter);
+  if(!b || !b.units || !b.amount) return null;
+  return parseFloat(b.amount) / parseFloat(b.units);
+}
 // ── STATUS ────────────────────────────────
 function getStatus(units){
   if(units < 100) return {cls:'s-ideal',  icon:'✅', text:'Ideal'};
