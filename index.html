@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meter Tracker — Mubeen · Home · Haveli</title>
+<title>Meter Tracker — Mobeen · Home · Haveli</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Barlow+Condensed:wght@600;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -472,7 +472,7 @@ canvas { max-height: 240px; }
     <span></span><span></span><span></span>
   </button>
   <div class="topbar-logo">⚡ Meter<span>|</span>Tracker</div>
-  <div class="topbar-sub">Mubeen · Home · Haveli</div>
+  <div class="topbar-sub">Mobeen · Home · Haveli</div>
   <div id="conn-dot" class="conn-dot offline">● Offline</div>
 </div>
 
@@ -507,7 +507,7 @@ canvas { max-height: 240px; }
     </nav>
     <div class="sidebar-meters">
       <div class="sidebar-section-label">Meters</div>
-      <div class="meter-chip"><span class="mc-dot" style="background:var(--m-mubeen)"></span>Mubeen</div>
+      <div class="meter-chip"><span class="mc-dot" style="background:var(--m-mubeen)"></span>Mobeen</div>
       <div class="meter-chip"><span class="mc-dot" style="background:var(--m-home)"></span>Home</div>
       <div class="meter-chip"><span class="mc-dot" style="background:var(--m-haveli)"></span>Haveli</div>
     </div>
@@ -544,7 +544,7 @@ canvas { max-height: 240px; }
           <div class="form-group">
             <label class="form-label">Meter</label>
             <select class="form-select" id="entry-meter">
-              <option value="mubeen">Mubeen</option>
+              <option value="mubeen">Mobeen</option>
               <option value="home">Home</option>
               <option value="haveli">Haveli</option>
             </select>
@@ -572,7 +572,7 @@ canvas { max-height: 240px; }
           <div class="form-group">
             <label class="form-label">Meter</label>
             <select class="form-select" id="bill-meter">
-              <option value="mubeen">Mubeen</option>
+              <option value="mubeen">Mobeen</option>
               <option value="home">Home</option>
               <option value="haveli">Haveli</option>
             </select>
@@ -604,7 +604,7 @@ canvas { max-height: 240px; }
         <label>Filter:</label>
         <select class="form-select" id="log-filter" onchange="renderLog()">
           <option value="all">All Meters</option>
-          <option value="mubeen">Mubeen</option>
+          <option value="mubeen">Mobeen</option>
           <option value="home">Home</option>
           <option value="haveli">Haveli</option>
         </select>
@@ -641,7 +641,7 @@ canvas { max-height: 240px; }
         <label>Filter:</label>
         <select class="form-select" id="billlog-filter" onchange="renderBillLog()">
           <option value="all">All Meters</option>
-          <option value="mubeen">Mubeen</option>
+          <option value="mubeen">Mobeen</option>
           <option value="home">Home</option>
           <option value="haveli">Haveli</option>
         </select>
@@ -675,7 +675,7 @@ canvas { max-height: 240px; }
         <div class="chart-header">
           <div class="chart-title">Daily Units — Last 30 Days</div>
           <select class="form-select" id="chart-meter" onchange="renderCharts()" style="width:130px; padding:7px 10px 7px 32px; font-size:12px;">
-            <option value="mubeen">Mubeen</option>
+            <option value="mubeen">Mobeen</option>
             <option value="home">Home</option>
             <option value="haveli">Haveli</option>
           </select>
@@ -712,7 +712,7 @@ canvas { max-height: 240px; }
 <script>
 // ── STATE ──────────────────────────────────
 const METERS = {
-  mubeen: { name:'Mubeen', color:'#38bdf8', badgeCls:'badge-mubeen', cardCls:'mubeen' },
+  mubeen: { name:'mubeen', color:'#38bdf8', badgeCls:'badge-mubeen', cardCls:'mubeen' },
   home:   { name:'Home',   color:'#a78bfa', badgeCls:'badge-home',   cardCls:'home'   },
   haveli: { name:'Haveli', color:'#2dd4bf', badgeCls:'badge-haveli', cardCls:'haveli' }
 };
@@ -895,7 +895,7 @@ function renderDashboard(){
       <div class="mc-stats">
         <div class="mc-stat">
           <div class="mc-stat-val" style="color:${meta.color}">${cu.toFixed(1)}</div>
-          <div class="mc-stat-lbl">Units This Cycle</div>
+          <div class="mc-stat-lbl">Units This Month</div>
         </div>
         <div class="mc-stat">
           <div class="mc-stat-val" style="color:${meta.color}">${yU!=null?yU.toFixed(1):'—'}</div>
