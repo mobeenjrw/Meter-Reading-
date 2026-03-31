@@ -803,10 +803,11 @@ function getCycleUnits(meter, today){
   const cs = getCycleStart(fmtDate(today));
   const daily = calcDailyUnits(allReadings[meter]||[]);
   const startStr = fmtDate(cs);
-  return daily.filter(d=> d.date > startStr && d.date <= fmtDate(today))
-              .reduce((s,d)=>s+d.units, 0);
+  
+  // یہاں > کے بجائے >= استعمال کریں تاکہ 29 تاریخ بھی شامل ہو جائے
+  return daily.filter(d => d.date >= startStr && d.date <= fmtDate(today))
+               .reduce((s,d) => s + d.units, 0);
 }
-
 function getLastReading(meter){
   const r = allReadings[meter]||[];
   return r.length ? r[r.length-1] : null;
