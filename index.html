@@ -859,7 +859,9 @@ function getLastBill(meter){
 function getAvgRate(meter){
   const b = getLastBill(meter);
   if(!b || !b.units || !b.amount) return null;
-  return parseFloat(b.amount) / parseFloat(b.units);
+  // 900 روپے نکال کر ریٹ معلوم کریں
+  const variableAmount = parseFloat(b.amount) - 900;
+  return variableAmount / parseFloat(b.units);
 }
 // ── STATUS ────────────────────────────────
 function getStatus(units){
@@ -884,7 +886,7 @@ function renderDashboard(){
     const yU   = getYesterdayUnits(key);
     const lr   = getLastReading(key);
     const rate = getAvgRate(key);
-    const est  = rate ? `₨${Math.round(cu*rate).toLocaleString()}` : '—';
+const est = rate ? `₨${Math.round(900 + (cu * rate)).toLocaleString()}` : '—';
     const st   = getStatus(cu);
     const lb   = getLastBill(key);
 
